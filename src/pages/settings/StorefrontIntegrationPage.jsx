@@ -6,9 +6,14 @@ import {
   Badge,
   Button,
 } from '../../components/ui'
+import { findActiveBackendStoreId, userHasWorkspace } from '../../auth/backendStore'
+import { useAuth } from '../../auth/useAuth'
 import { getStorefrontIntegration } from '../../mock'
 import { formatDateTime } from '../../lib/format'
 import { cn } from '../../lib/cn'
+import { ApiError } from '../../lib/api'
+import { startShopifyOAuth } from '../../lib/shopifyOAuth'
+import { useActiveStore } from '../../store/useActiveStore'
 
 function StatusRow({ label, value, ok, detail }) {
   return (
@@ -33,6 +38,14 @@ export function StorefrontIntegrationPage() {
   const initial = getStorefrontIntegration()
   const [integration, setIntegration] = useState(initial)
   const [checking, setChecking] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [connectError, setConnectError] = useState('')
+  const { activeStore } = useActiveStore()
+  const { user, isAuthenticated } = useAuth()
+
+  const backendStoreId = findActiveBackendStoreId(user)
+  const hasWorkspace = userHasWorkspace(user)
+  const canStartOAuth = isAuthenticated && hasWorkspace
 
   const embedOk = integration.appEmbedEnabled
   const trackingOk = integration.storefrontTracking === 'active'
@@ -58,13 +71,78 @@ export function StorefrontIntegrationPage() {
     setIntegration(initial)
   }
 
+  const connectShopify = async () => {
+    if (!canStartOAuth) return
+    setConnectError('')
+    setConnecting(true)
+    try {
+      await startShopifyOAuth({
+        selectedDomain: activeStore?.domain ?? null,
+      })
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'Network error while starting Shopify connection.'
+      setConnectError(message)
+      setConnecting(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Storefront integration"
-        description="Future Inboxly Shopify App Embed connection — mock status only. No Theme Editor API calls."
-        actions={<Badge tone="accent">Prototype · not connected to Shopify</Badge>}
+        description="Connect Shopify through Inboxly OAuth, then enable the App Embed in the theme editor."
+        actions={<Badge tone="accent">Shopify OAuth</Badge>}
       />
+
+      <Card className="mb-4 space-y-3">
+        {canStartOAuth ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">Connect Shopify</h3>
+              <p className="mt-1 text-xs text-muted">
+                Uses your signed-in Inboxly session
+                {backendStoreId ? (
+                  <>
+                    {' '}
+                    and backend store <span className="font-mono text-ink">{backendStoreId}</span>
+                  </>
+                ) : (
+                  <>
+                    . Inboxly will resolve a real store ULID from your workspace — the mock
+                    storefront selector is never used as a store ID
+                  </>
+                )}
+                . You will leave Inboxly to approve access in Shopify; connection is confirmed
+                only after Shopify redirects back.
+              </p>
+            </div>
+            <Button onClick={connectShopify} disabled={connecting}>
+              <Cable className="size-4" />
+              {connecting ? 'Redirecting to Shopify…' : 'Connect Shopify'}
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Shopify OAuth unavailable</h3>
+            <p className="mt-1 text-xs text-muted">
+              {!isAuthenticated
+                ? 'Sign in to Inboxly before connecting Shopify.'
+                : 'Your account has no workspace yet. Create a workspace and store on the backend before connecting Shopify — mock storefronts are not used for OAuth.'}
+            </p>
+          </div>
+        )}
+        {connectError ? (
+          <div
+            role="alert"
+            className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+          >
+            {connectError}
+          </div>
+        ) : null}
+      </Card>
 
       {!embedOk ? (
         <div className="mb-4 flex flex-col gap-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -75,8 +153,8 @@ export function StorefrontIntegrationPage() {
                 App embed is switched off in the demo theme
               </p>
               <p className="text-xs text-muted">
-                Turn it on in the Shopify Theme Editor for tracking and forms to work. This banner
-                is a frontend prototype.
+                After OAuth, turn on the Inboxly App Embed in the Shopify Theme Editor for tracking
+                and forms.
               </p>
             </div>
           </div>

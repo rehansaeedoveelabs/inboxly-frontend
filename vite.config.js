@@ -15,16 +15,27 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    allowedHosts: ['cemetery-nextel-tribal-far.trycloudflare.com'],
+    allowedHosts: ['cohen-raises-attempting-administrators.trycloudflare.com'],
     proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
-      '/sanctum': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
+      // Sanctum only starts a session when Origin/Referer matches
+      // SANCTUM_STATEFUL_DOMAINS. Tunnel hosts change often, so normalize to
+      // the local Vite origin Laravel already trusts.
+      '/api': createSanctumProxy(),
+      '/sanctum': createSanctumProxy(),
     },
   },
 })
+
+function createSanctumProxy() {
+  const spaOrigin = 'http://127.0.0.1:5173'
+  return {
+    target: 'http://127.0.0.1:8000',
+    changeOrigin: true,
+    configure(proxy) {
+      proxy.on('proxyReq', (proxyReq) => {
+        proxyReq.setHeader('Origin', spaOrigin)
+        proxyReq.setHeader('Referer', `${spaOrigin}/`)
+      })
+    },
+  }
+}

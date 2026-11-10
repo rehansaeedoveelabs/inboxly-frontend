@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, HelpCircle, Menu, UserRound } from 'lucide-react'
-import { getCurrentUser, getStores } from '../../mock/workspace'
+import { useAuth } from '../../auth/useAuth'
+import { getStores } from '../../mock/workspace'
 import { Button } from '../ui/Button'
 import { Dropdown } from '../ui/Dropdown'
 import { Badge } from '../ui/Badge'
@@ -8,9 +10,28 @@ import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 
 export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
   const stores = getStores()
-  const user = getCurrentUser()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [noticeOpen, setNoticeOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const activeStore = stores.find((store) => store.id === activeStoreId) || stores[0]
+
+  const onUserMenuSelect = async (item) => {
+    if (item.id === 'account') {
+      navigate('/settings/account')
+      return
+    }
+    if (item.id === 'logout') {
+      if (signingOut) return
+      setSigningOut(true)
+      try {
+        await logout()
+        navigate('/login', { replace: true })
+      } catch {
+        setSigningOut(false)
+      }
+    }
+  }
 
   return (
     <header className="relative sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-midnight/95 px-3 backdrop-blur sm:px-4">
@@ -62,15 +83,17 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
               <span className="flex size-6 items-center justify-center rounded-full bg-secondary">
                 <UserRound className="size-3.5 text-muted" aria-hidden />
               </span>
-              <span className="hidden max-w-[8rem] truncate md:inline">{user.name}</span>
+              <span className="hidden max-w-[8rem] truncate md:inline">
+                {user?.name || 'Account'}
+              </span>
             </span>
           }
           items={[
-            { id: 'profile', label: `${user.email}` },
-            { id: 'role', label: `Role: ${user.role}` },
+            { id: 'profile', label: user?.email || 'Signed in', disabled: true },
             { id: 'account', label: 'Account settings' },
+            { id: 'logout', label: signingOut ? 'Signing out…' : 'Sign out' },
           ]}
-          onSelect={() => {}}
+          onSelect={onUserMenuSelect}
         />
       </div>
 
