@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Monitor, Smartphone } from 'lucide-react'
 import {
@@ -16,6 +16,13 @@ import {
 import { getFormById } from '../../mock'
 import { statusLabel, statusTone } from '../../lib/format'
 import { cn } from '../../lib/cn'
+
+const fieldPalette = [
+  { type: 'email', label: 'Email' },
+  { type: 'phone', label: 'Phone number' },
+  { type: 'consent', label: 'Legal consent' },
+  { type: 'text', label: 'Text input' },
+]
 
 function createBlank(type) {
   return {
@@ -66,16 +73,6 @@ export function FormEditorPage() {
   }
 
   const previewWidth = device === 'mobile' ? 'max-w-sm' : 'max-w-lg'
-
-  const fieldPalette = useMemo(
-    () => [
-      { type: 'email', label: 'Email' },
-      { type: 'phone', label: 'Phone number' },
-      { type: 'consent', label: 'Legal consent' },
-      { type: 'text', label: 'Text input' },
-    ],
-    [],
-  )
 
   const addField = (type) => {
     setForm((current) => ({
