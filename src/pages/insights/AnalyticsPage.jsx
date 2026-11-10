@@ -18,6 +18,8 @@ import {
   getChannelPerformance,
 } from '../../mock'
 import { formatCurrency, formatNumber, statusLabel, statusTone } from '../../lib/format'
+import { useTheme } from '../../theme/useTheme'
+import { getChartThemeColors } from '../../theme/theme'
 import {
   CartesianGrid,
   Line,
@@ -33,6 +35,8 @@ import {
 export function AnalyticsPage() {
   const [range, setRange] = useState('30d')
   const [reportTab, setReportTab] = useState('campaigns')
+  const { resolved } = useTheme()
+  const chart = getChartThemeColors()
   const overview = getAnalyticsOverview()
   const growth = getAudienceGrowthSeries()
   const channels = getChannelPerformance()
@@ -99,30 +103,40 @@ export function AnalyticsPage() {
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <ChartContainer title="Audience growth">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`growth-${resolved}`}>
             <LineChart data={growth}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="label" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{ background: '#191E2B', border: '1px solid #2E3648', borderRadius: 8 }}
+                contentStyle={{
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
+                  borderRadius: 8,
+                  color: chart.tooltipText,
+                }}
               />
-              <Line type="monotone" dataKey="subscribed" stroke="#2878FF" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="unsubscribed" stroke="#FFA66B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="subscribed" stroke={chart.electric} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="unsubscribed" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
 
         <ChartContainer title="Channel performance (revenue)">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`channel-${resolved}`}>
             <BarChart data={channels}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="channel" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="channel" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{ background: '#191E2B', border: '1px solid #2E3648', borderRadius: 8 }}
+                contentStyle={{
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
+                  borderRadius: 8,
+                  color: chart.tooltipText,
+                }}
               />
-              <Bar dataKey="revenue" fill="#2878FF" radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="revenue" fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         </ChartContainer>

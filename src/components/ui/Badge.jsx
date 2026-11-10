@@ -6,7 +6,7 @@ const tones = {
   success: 'bg-success/15 text-success border-success/30',
   warning: 'bg-warning/15 text-warning border-warning/30',
   danger: 'bg-danger/15 text-danger border-danger/30',
-  accent: 'bg-cantaloupe/15 text-cantaloupe border-cantaloupe/30',
+  accent: 'bg-cantaloupe/15 text-cantaloupe-ink border-cantaloupe/30',
 }
 
 export function Badge({ children, tone = 'neutral', className }) {

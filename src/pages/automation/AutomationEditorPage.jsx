@@ -175,7 +175,7 @@ export function AutomationEditorPage() {
             </Button>
             <p className="text-xs text-muted">Click a node to edit its settings.</p>
           </div>
-          <div className="relative h-[32rem] overflow-auto bg-[radial-gradient(circle_at_1px_1px,#2E3648_1px,transparent_0)] bg-[length:18px_18px] p-6">
+          <div className="canvas-dots relative h-[32rem] overflow-auto bg-midnight p-6">
             {workflow.nodes.map((node) => (
               <button
                 key={node.id}

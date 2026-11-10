@@ -17,6 +17,8 @@ import {
   getRevenueSeries,
 } from '../mock'
 import { formatCurrency, formatNumber, statusLabel, statusTone } from '../lib/format'
+import { useTheme } from '../theme/useTheme'
+import { getChartThemeColors } from '../theme/theme'
 import {
   Bar,
   BarChart,
@@ -32,6 +34,8 @@ import {
 export function DashboardPage() {
   const [range, setRange] = useState('30d')
   const [chartTab, setChartTab] = useState('revenue')
+  const { resolved } = useTheme()
+  const chart = getChartThemeColors()
   const metrics = getDashboardMetrics()
   const revenueSeries = getRevenueSeries()
   const audienceSeries = getAudienceSeries()
@@ -99,38 +103,40 @@ export function DashboardPage() {
             />
           }
         >
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`bar-${resolved}`}>
             <BarChart data={revenueSeries}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="label" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: '#191E2B',
-                  border: '1px solid #2E3648',
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
                   borderRadius: 8,
+                  color: chart.tooltipText,
                 }}
               />
-              <Bar dataKey={chartTab} fill="#2878FF" radius={[4, 4, 0, 0]} maxBarSize={36} />
+              <Bar dataKey={chartTab} fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </ChartContainer>
 
         <ChartContainer className="xl:col-span-2" title="Audience growth">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`line-${resolved}`}>
             <LineChart data={audienceSeries}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="label" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: '#191E2B',
-                  border: '1px solid #2E3648',
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
                   borderRadius: 8,
+                  color: chart.tooltipText,
                 }}
               />
-              <Line type="monotone" dataKey="email" stroke="#2878FF" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sms" stroke="#FFA66B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="email" stroke={chart.electric} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="sms" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>

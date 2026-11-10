@@ -40,7 +40,7 @@ export function BrandAssetsPage() {
       />
 
       {savedNotice ? (
-        <div className="mb-3 rounded-md border border-cantaloupe/40 bg-cantaloupe/10 px-3 py-2 text-sm text-cantaloupe">
+        <div className="mb-3 rounded-md border border-cantaloupe/40 bg-cantaloupe/10 px-3 py-2 text-sm text-cantaloupe-ink">
           Local preview updated — nothing was saved to a backend.
         </div>
       ) : null}

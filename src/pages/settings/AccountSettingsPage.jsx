@@ -7,13 +7,16 @@ import {
   FormField,
   Input,
   Table,
+  ThemeSwitcher,
 } from '../../components/ui'
 import { getAccountSettings } from '../../mock'
+import { useTheme } from '../../theme/useTheme'
 
 export function AccountSettingsPage() {
   const initial = getAccountSettings()
   const [account, setAccount] = useState(initial)
   const [notice, setNotice] = useState('')
+  const { preference, resolved } = useTheme()
 
   const save = () => {
     setNotice('Account preferences updated locally — not saved to a backend.')
@@ -65,6 +68,15 @@ export function AccountSettingsPage() {
 
         <Card className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Preferences</h3>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-ink">Appearance</p>
+              <p className="text-xs text-muted">
+                Preference: {preference} · Applied: {resolved}. Saved in this browser only.
+              </p>
+            </div>
+            <ThemeSwitcher />
+          </div>
           {[
             ['emailDigest', 'Email digest'],
             ['productUpdates', 'Product updates'],

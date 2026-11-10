@@ -19,7 +19,7 @@ export function Modal({ open, onClose, title, children, footer, className }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-midnight/80"
+        className="absolute inset-0 bg-overlay"
         aria-label="Close dialog"
         onClick={onClose}
       />

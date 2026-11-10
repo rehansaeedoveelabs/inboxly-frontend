@@ -4,6 +4,7 @@ import { getCurrentUser, getStores } from '../../mock/workspace'
 import { Button } from '../ui/Button'
 import { Dropdown } from '../ui/Dropdown'
 import { Badge } from '../ui/Badge'
+import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 
 export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
   const stores = getStores()
@@ -41,6 +42,7 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
+        <ThemeSwitcher />
         <Button
           variant="ghost"
           size="sm"

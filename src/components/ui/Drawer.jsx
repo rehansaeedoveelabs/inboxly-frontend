@@ -24,7 +24,7 @@ export function Drawer({ open, onClose, title, children, className }) {
       <button
         type="button"
         className={cn(
-          'absolute inset-0 bg-midnight/70 transition-opacity',
+          'absolute inset-0 bg-overlay transition-opacity',
           open ? 'opacity-100' : 'opacity-0',
         )}
         aria-label="Close drawer"

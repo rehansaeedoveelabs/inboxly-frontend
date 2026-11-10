@@ -14,7 +14,7 @@ export function Sidebar({
     <>
       <div
         className={cn(
-          'fixed inset-0 z-40 bg-midnight/70 transition-opacity lg:hidden',
+          'fixed inset-0 z-40 bg-overlay transition-opacity lg:hidden',
           mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={onMobileClose}

@@ -1,17 +1,62 @@
 @import "tailwindcss";
 
+/*
+  Semantic Inboxly tokens.
+  Utilities (bg-midnight, text-ink, …) resolve through these CSS variables
+  so light/dark can swap without rewriting components.
+*/
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --inboxly-page: #10131C;
+  --inboxly-elevated: #191E2B;
+  --inboxly-secondary: #252C3B;
+  --inboxly-ink: #F3F5FA;
+  --inboxly-muted: #A4ADBF;
+  --inboxly-line: #2E3648;
+  --inboxly-electric: #2878FF;
+  --inboxly-cantaloupe: #FFA66B;
+  /* Readable accent text — matches brand orange on dark surfaces */
+  --inboxly-cantaloupe-ink: #FFA66B;
+  --inboxly-danger: #F07178;
+  --inboxly-success: #3DDC97;
+  --inboxly-warning: #F0C14D;
+  --inboxly-canvas-dot: #2E3648;
+  --inboxly-overlay: rgb(16 19 28 / 0.8);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --inboxly-page: #F4F6FA;
+  --inboxly-elevated: #FFFFFF;
+  --inboxly-secondary: #E8ECF4;
+  --inboxly-ink: #12151F;
+  --inboxly-muted: #5C6578;
+  --inboxly-line: #D5DBE7;
+  --inboxly-electric: #2878FF;
+  --inboxly-cantaloupe: #FFA66B;
+  /* Darker orange for text/badges on light surfaces (brand fill stays #FFA66B) */
+  --inboxly-cantaloupe-ink: #B85A1E;
+  --inboxly-danger: #D1434B;
+  --inboxly-success: #1F9A6A;
+  --inboxly-warning: #C48A12;
+  --inboxly-canvas-dot: #C9D0DE;
+  --inboxly-overlay: rgb(18 21 31 / 0.45);
+}
+
 @theme {
-  --color-midnight: #10131C;
-  --color-elevated: #191E2B;
-  --color-secondary: #252C3B;
-  --color-electric: #2878FF;
-  --color-cantaloupe: #FFA66B;
-  --color-ink: #F3F5FA;
-  --color-muted: #A4ADBF;
-  --color-line: #2E3648;
-  --color-danger: #F07178;
-  --color-success: #3DDC97;
-  --color-warning: #F0C14D;
+  --color-midnight: var(--inboxly-page);
+  --color-elevated: var(--inboxly-elevated);
+  --color-secondary: var(--inboxly-secondary);
+  --color-electric: var(--inboxly-electric);
+  --color-cantaloupe: var(--inboxly-cantaloupe);
+  --color-cantaloupe-ink: var(--inboxly-cantaloupe-ink);
+  --color-ink: var(--inboxly-ink);
+  --color-muted: var(--inboxly-muted);
+  --color-line: var(--inboxly-line);
+  --color-danger: var(--inboxly-danger);
+  --color-success: var(--inboxly-success);
+  --color-warning: var(--inboxly-warning);
 
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 
@@ -36,8 +81,8 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
-    background: var(--color-midnight);
-    color: var(--color-ink);
+    background: var(--inboxly-page);
+    color: var(--inboxly-ink);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -50,7 +95,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-electric);
+    outline: 2px solid var(--inboxly-electric);
     outline-offset: 2px;
   }
 }
@@ -58,6 +103,19 @@
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-secondary) transparent;
+    scrollbar-color: var(--inboxly-secondary) transparent;
+  }
+
+  .bg-overlay {
+    background: var(--inboxly-overlay);
+  }
+
+  .canvas-dots {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      var(--inboxly-canvas-dot) 1px,
+      transparent 0
+    );
+    background-size: 18px 18px;
   }
 }
