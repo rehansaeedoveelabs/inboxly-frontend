@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   PageHeader,
   MetricCard,
@@ -8,6 +9,16 @@ import {
   Badge,
   Tabs,
 } from '../components/ui'
+import {
+  getAudienceSeries,
+  getDashboardMetrics,
+  getRecentAutomationActivity,
+  getRecentCampaignActivity,
+  getRevenueSeries,
+} from '../mock'
+import { formatCurrency, formatNumber, statusLabel, statusTone } from '../lib/format'
+import { useTheme } from '../theme/useTheme'
+import { getChartThemeColors } from '../theme/theme'
 import {
   Bar,
   BarChart,
@@ -20,23 +31,16 @@ import {
   YAxis,
 } from 'recharts'
 
-const revenueSeries = [
-  { label: 'W1', revenue: 4200, orders: 38 },
-  { label: 'W2', revenue: 5100, orders: 44 },
-  { label: 'W3', revenue: 4700, orders: 41 },
-  { label: 'W4', revenue: 6200, orders: 52 },
-]
-
-const audienceSeries = [
-  { label: 'W1', email: 1180, sms: 240 },
-  { label: 'W2', email: 1240, sms: 255 },
-  { label: 'W3', email: 1310, sms: 268 },
-  { label: 'W4', email: 1395, sms: 290 },
-]
-
 export function DashboardPage() {
   const [range, setRange] = useState('30d')
   const [chartTab, setChartTab] = useState('revenue')
+  const { resolved } = useTheme()
+  const chart = getChartThemeColors()
+  const metrics = getDashboardMetrics()
+  const revenueSeries = getRevenueSeries()
+  const audienceSeries = getAudienceSeries()
+  const campaigns = getRecentCampaignActivity()
+  const automations = getRecentAutomationActivity()
 
   return (
     <div>
@@ -52,10 +56,36 @@ export function DashboardPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Marketing revenue" value="$18,200" trend="+12.4%" hint="Campaigns + automation" />
-        <MetricCard label="Campaign revenue" value="$7,450" trend="+4.1%" hint="Email & SMS sends" />
-        <MetricCard label="Automation revenue" value="$10,750" trend="+18.2%" hint="Active workflows" />
-        <MetricCard label="Audience growth" value="+215" trend="+8.6%" hint="Net new subscribers" />
+        <MetricCard
+          label="Marketing revenue"
+          value={formatCurrency(metrics.marketingRevenue)}
+          trend="+12.4%"
+          hint="Campaigns + automation"
+        />
+        <MetricCard
+          label="Campaign revenue"
+          value={formatCurrency(metrics.campaignRevenue)}
+          trend="+4.1%"
+          hint="Email & SMS sends"
+        />
+        <MetricCard
+          label="Automation revenue"
+          value={formatCurrency(metrics.automationRevenue)}
+          trend="+18.2%"
+          hint="Active workflows"
+        />
+        <MetricCard
+          label="Audience growth"
+          value={`+${formatNumber(metrics.audienceGrowth)}`}
+          trend="+8.6%"
+          hint="Net new subscribers"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Email subscribers" value={formatNumber(metrics.emailSubscribers)} hint="Subscribed contacts" />
+        <MetricCard label="SMS subscribers" value={formatNumber(metrics.smsSubscribers)} hint="Opted-in SMS" />
+        <MetricCard label="Push subscribers" value={formatNumber(metrics.pushSubscribers)} hint="Web push enabled" />
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-5">
@@ -73,43 +103,40 @@ export function DashboardPage() {
             />
           }
         >
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`bar-${resolved}`}>
             <BarChart data={revenueSeries}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="label" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: '#191E2B',
-                  border: '1px solid #2E3648',
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
                   borderRadius: 8,
+                  color: chart.tooltipText,
                 }}
               />
-              <Bar
-                dataKey={chartTab}
-                fill="#2878FF"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={36}
-              />
+              <Bar dataKey={chartTab} fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </ChartContainer>
 
         <ChartContainer className="xl:col-span-2" title="Audience growth">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={`line-${resolved}`}>
             <LineChart data={audienceSeries}>
-              <CartesianGrid stroke="#2E3648" vertical={false} />
-              <XAxis dataKey="label" stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#A4ADBF" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid stroke={chart.grid} vertical={false} />
+              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: '#191E2B',
-                  border: '1px solid #2E3648',
+                  background: chart.tooltipBg,
+                  border: `1px solid ${chart.tooltipBorder}`,
                   borderRadius: 8,
+                  color: chart.tooltipText,
                 }}
               />
-              <Line type="monotone" dataKey="email" stroke="#2878FF" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sms" stroke="#FFA66B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="email" stroke={chart.electric} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="sms" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
@@ -119,42 +146,44 @@ export function DashboardPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Recent campaigns</h3>
-            <Badge tone="neutral">Shell preview</Badge>
+            <Link to="/campaigns" className="text-sm text-electric hover:underline">
+              View all
+            </Link>
           </div>
           <ul className="space-y-2 text-sm">
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Spring launch — email</span>
-              <Badge tone="success">Sent</Badge>
-            </li>
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Flash sale — SMS</span>
-              <Badge tone="info">Scheduled</Badge>
-            </li>
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Winback series</span>
-              <Badge tone="warning">Draft</Badge>
-            </li>
+            {campaigns.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
+              >
+                <Link to={`/campaigns/${item.id}`} className="truncate text-ink hover:text-electric">
+                  {item.name}
+                </Link>
+                <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
+              </li>
+            ))}
           </ul>
         </Card>
 
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Recent automations</h3>
-            <Badge tone="neutral">Shell preview</Badge>
+            <Link to="/automation" className="text-sm text-electric hover:underline">
+              View all
+            </Link>
           </div>
           <ul className="space-y-2 text-sm">
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Abandoned cart</span>
-              <Badge tone="success">Active</Badge>
-            </li>
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Welcome journey</span>
-              <Badge tone="success">Active</Badge>
-            </li>
-            <li className="flex items-center justify-between rounded-md border border-line bg-midnight px-3 py-2">
-              <span>Browse abandonment</span>
-              <Badge tone="warning">Paused</Badge>
-            </li>
+            {automations.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
+              >
+                <Link to={`/automation/${item.id}`} className="truncate text-ink hover:text-electric">
+                  {item.name}
+                </Link>
+                <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
+              </li>
+            ))}
           </ul>
         </Card>
       </div>

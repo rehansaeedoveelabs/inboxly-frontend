@@ -4,7 +4,6 @@ import {
   Cable,
   Contact,
   Download,
-  FileInput,
   FormInput,
   Image,
   LayoutDashboard,

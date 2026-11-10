@@ -1,10 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-theme-preference="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inboxly</title>
+    <script>
+      (function () {
+        try {
+          var key = 'inboxly-theme'
+          var pref = localStorage.getItem(key) || 'dark'
+          if (pref !== 'dark' && pref !== 'light' && pref !== 'system') pref = 'dark'
+          var resolved =
+            pref === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : pref
+          document.documentElement.setAttribute('data-theme', resolved)
+          document.documentElement.setAttribute('data-theme-preference', pref)
+          document.documentElement.style.colorScheme = resolved
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+          document.documentElement.setAttribute('data-theme-preference', 'dark')
+          document.documentElement.style.colorScheme = 'dark'
+        }
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

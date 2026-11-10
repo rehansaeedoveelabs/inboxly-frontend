@@ -21,7 +21,7 @@ export function MetricCard({ label, value, hint, trend, className }) {
       <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
       <div className="mt-2 flex items-end justify-between gap-2">
         <p className="text-2xl font-semibold tracking-tight text-ink">{value}</p>
-        {trend ? <span className="text-xs text-cantaloupe">{trend}</span> : null}
+        {trend ? <span className="text-xs text-cantaloupe-ink">{trend}</span> : null}
       </div>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </Card>

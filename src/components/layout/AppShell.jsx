@@ -1,19 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { getStores } from '../../mock/workspace'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 
 export function AppShell() {
-  const location = useLocation()
   const stores = getStores()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [activeStoreId, setActiveStoreId] = useState(stores[0]?.id)
-
-  useEffect(() => {
-    setMobileOpen(false)
-  }, [location.pathname])
 
   useEffect(() => {
     const onResize = () => {

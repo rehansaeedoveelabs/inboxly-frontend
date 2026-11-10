@@ -2,11 +2,11 @@ import { cn } from '../../lib/cn'
 
 const variants = {
   primary:
-    'bg-electric text-ink hover:bg-electric/90 border border-electric',
+    'bg-electric text-white hover:bg-electric/90 border border-electric',
   secondary:
     'bg-secondary text-ink hover:bg-secondary/80 border border-line',
   accent:
-    'bg-cantaloupe/15 text-cantaloupe hover:bg-cantaloupe/25 border border-cantaloupe/40',
+    'bg-cantaloupe/15 text-cantaloupe-ink hover:bg-cantaloupe/25 border border-cantaloupe/40',
   ghost:
     'bg-transparent text-muted hover:text-ink hover:bg-secondary/60 border border-transparent',
   danger:
