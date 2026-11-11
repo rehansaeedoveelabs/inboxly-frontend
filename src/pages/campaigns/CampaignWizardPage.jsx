@@ -26,6 +26,7 @@ import {
 import { listStoreSegments } from '../../lib/segmentsApi'
 import { firstFieldError } from '../../lib/tagsUi'
 import { useActiveStore } from '../../store/useActiveStore'
+import { StarterMessagePicker } from '../../components/campaigns/StarterMessagePicker'
 
 const steps = [
   { id: 'setup', label: 'Setup' },
@@ -468,50 +469,70 @@ export function CampaignWizardPage() {
       )}
 
       {step === 'content' && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Card className="space-y-3">
-            {!isSms ? (
-              <>
-                <FormField label="Subject line" error={errors.subject}>
-                  <Input
-                    value={form.subject}
-                    onChange={(event) =>
-                      setForm((value) => ({ ...value, subject: event.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField label="Preview text">
-                  <Input
-                    value={form.previewText}
-                    onChange={(event) =>
-                      setForm((value) => ({ ...value, previewText: event.target.value }))
-                    }
-                  />
-                </FormField>
-              </>
-            ) : null}
-            <FormField label={isSms ? 'SMS message' : 'Email body'} error={errors.body}>
-              <Textarea
-                rows={12}
-                value={form.body}
-                onChange={(event) => setForm((value) => ({ ...value, body: event.target.value }))}
-              />
-            </FormField>
-            {isSms ? (
-              <p className="text-xs text-muted">{form.body.length}/160 characters (soft limit)</p>
-            ) : null}
-          </Card>
-          <Card>
-            <h3 className="mb-3 text-sm font-semibold text-ink">Preview</h3>
-            <div className="rounded-md border border-line bg-midnight p-4">
+        <div className="space-y-3">
+          <StarterMessagePicker
+            channel={channel}
+            form={form}
+            onApplyFields={(fields) => {
+              setForm((current) => ({ ...current, ...fields }))
+              setErrors((current) => ({
+                ...current,
+                name: undefined,
+                subject: undefined,
+                body: undefined,
+              }))
+            }}
+          />
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Card className="space-y-3">
               {!isSms ? (
-                <p className="mb-2 text-sm font-semibold text-ink">{form.subject || 'Subject'}</p>
+                <>
+                  <FormField label="Subject line" error={errors.subject}>
+                    <Input
+                      value={form.subject}
+                      onChange={(event) =>
+                        setForm((value) => ({ ...value, subject: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                  <FormField label="Preview text">
+                    <Input
+                      value={form.previewText}
+                      onChange={(event) =>
+                        setForm((value) => ({ ...value, previewText: event.target.value }))
+                      }
+                    />
+                  </FormField>
+                </>
               ) : null}
-              <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
-                {form.body || 'Message body'}
-              </pre>
-            </div>
-          </Card>
+              <FormField label={isSms ? 'SMS message' : 'Email body'} error={errors.body}>
+                <Textarea
+                  rows={12}
+                  value={form.body}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, body: event.target.value }))
+                  }
+                />
+              </FormField>
+              {isSms ? (
+                <p className="text-xs text-muted">{form.body.length}/160 characters (soft limit)</p>
+              ) : null}
+            </Card>
+            <Card>
+              <h3 className="mb-3 text-sm font-semibold text-ink">Preview</h3>
+              <div className="rounded-md border border-line bg-midnight p-4">
+                {!isSms ? (
+                  <p className="mb-2 text-sm font-semibold text-ink">
+                    {form.subject || 'Subject'}
+                  </p>
+                ) : null}
+                <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
+                  {form.body || 'Message body'}
+                </pre>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
 
