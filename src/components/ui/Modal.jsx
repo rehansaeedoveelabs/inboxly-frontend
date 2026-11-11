@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from './Button'
@@ -58,32 +58,60 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   tone = 'primary',
 }) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      setPending(false)
+      setError('')
+    }
+  }, [open])
+
+  const handleClose = () => {
+    if (pending) return
+    onClose?.()
+  }
+
+  const handleConfirm = async () => {
+    if (pending) return
+    setError('')
+    setPending(true)
+    try {
+      await onConfirm?.()
+      onClose?.()
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Something went wrong.')
+      setPending(false)
+    }
+  }
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={title}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={pending} onClick={handleClose}>
             Cancel
           </Button>
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
-            onClick={() => {
-              onConfirm?.()
-              onClose?.()
-            }}
+            disabled={pending}
+            onClick={handleConfirm}
           >
-            {confirmLabel}
+            {pending ? 'Working…' : confirmLabel}
           </Button>
         </>
       }
     >
       <p className="text-sm text-muted">{description}</p>
-      <p className="mt-2 text-xs text-muted">
-        Prototype only — this action is not saved to a backend.
-      </p>
+      {error ? (
+        <p className="mt-2 text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
     </Modal>
   )
 }
