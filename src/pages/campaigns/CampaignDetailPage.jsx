@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
@@ -7,25 +8,158 @@ import {
   MetricCard,
   EmptyState,
   Button,
+  LoadingState,
+  ErrorState,
+  ConfirmDialog,
 } from '../../components/ui'
-import { getCampaignById } from '../../mock'
-import { formatCurrency, formatDateTime, formatNumber, statusLabel, statusTone } from '../../lib/format'
+import { ApiError } from '../../lib/api'
+import {
+  deleteCampaign,
+  duplicateCampaign,
+  formatCampaignAudience,
+  getCampaign,
+  unscheduleCampaign,
+} from '../../lib/campaignsApi'
+import { listStoreSegments } from '../../lib/segmentsApi'
+import { formatDateTime, formatNumber, statusLabel, statusTone } from '../../lib/format'
+import { useActiveStore } from '../../store/useActiveStore'
 
 export function CampaignDetailPage() {
   const { campaignId } = useParams()
   const navigate = useNavigate()
-  const campaign = getCampaignById(campaignId)
+  const { activeStore, status: storeStatus } = useActiveStore()
+  const storeId = activeStore?.id
 
-  if (!campaign) {
+  const [campaign, setCampaign] = useState(null)
+  const [segmentNames, setSegmentNames] = useState(() => new Map())
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [notFound, setNotFound] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [refreshNonce, setRefreshNonce] = useState(0)
+
+  const reload = useCallback(() => {
+    setRefreshNonce((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!campaignId || storeStatus === 'loading') return undefined
+
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
+    setNotFound(false)
+
+    const load = async () => {
+      try {
+        const [record, segments] = await Promise.all([
+          getCampaign(campaignId),
+          storeId ? listStoreSegments(storeId) : Promise.resolve([]),
+        ])
+        if (cancelled) return
+        setCampaign(record)
+        setSegmentNames(new Map(segments.map((segment) => [segment.id, segment.name])))
+      } catch (error) {
+        if (cancelled) return
+        setCampaign(null)
+        if (error instanceof ApiError && error.status === 404) {
+          setNotFound(true)
+          return
+        }
+        setLoadError(error instanceof ApiError ? error.message : 'Unable to load the campaign.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId, storeId, storeStatus, refreshNonce])
+
+  if (!campaignId) {
     return (
       <EmptyState
         title="Campaign not found"
-        description="This campaign ID is not in the mock dataset."
+        description="This campaign does not exist or is no longer available."
         actionLabel="Back to campaigns"
         onAction={() => navigate('/campaigns')}
       />
     )
   }
+
+  const onUnschedule = async () => {
+    if (!campaign || busy) return
+    setBusy(true)
+    setActionError('')
+    try {
+      const updated = await unscheduleCampaign(campaign.id)
+      setCampaign(updated)
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to unschedule.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onDuplicate = async () => {
+    if (!campaign || busy) return
+    setBusy(true)
+    setActionError('')
+    try {
+      const copy = await duplicateCampaign(campaign.id)
+      navigate(`/campaigns/${copy.id}/edit`)
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to duplicate.')
+      setBusy(false)
+    }
+  }
+
+  const onDelete = async () => {
+    if (!campaign) return
+    setActionError('')
+    await deleteCampaign(campaign.id)
+    navigate('/campaigns')
+  }
+
+  if (storeStatus === 'loading' || loading) {
+    return <LoadingState label="Loading campaign…" />
+  }
+
+  if (notFound) {
+    return (
+      <EmptyState
+        title="Campaign not found"
+        description="This campaign does not exist or is no longer available."
+        actionLabel="Back to campaigns"
+        onAction={() => navigate('/campaigns')}
+      />
+    )
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState title="Unable to load campaign" description={loadError} onRetry={reload} />
+    )
+  }
+
+  if (!campaign) {
+    return (
+      <EmptyState
+        title="Campaign not found"
+        description="This campaign does not exist or is no longer available."
+        actionLabel="Back to campaigns"
+        onAction={() => navigate('/campaigns')}
+      />
+    )
+  }
+
+  const isDraft = campaign.status === 'draft'
+  const isScheduled = campaign.status === 'scheduled'
+  const audience = formatCampaignAudience(campaign, segmentNames)
 
   return (
     <div>
@@ -38,54 +172,105 @@ export function CampaignDetailPage() {
 
       <PageHeader
         title={campaign.name}
-        description={`${campaign.channel.toUpperCase()} · ${campaign.audience}`}
+        description={`${String(campaign.channel || '').toUpperCase()} · ${audience}`}
         actions={
           <>
             <Badge tone={statusTone(campaign.status)}>{statusLabel(campaign.status)}</Badge>
-            <Button variant="secondary" onClick={() => alert('Prototype only — duplicate stays local.')}>
+            {isDraft ? (
+              <Button variant="secondary" onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}>
+                Edit
+              </Button>
+            ) : null}
+            {isScheduled ? (
+              <Button variant="secondary" disabled={busy} onClick={onUnschedule}>
+                Unschedule
+              </Button>
+            ) : null}
+            <Button variant="secondary" disabled={busy} onClick={onDuplicate}>
               Duplicate
             </Button>
+            {isDraft ? (
+              <Button variant="danger" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                Delete
+              </Button>
+            ) : null}
           </>
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Delivered" value={formatNumber(campaign.stats.delivered)} />
-        <MetricCard label="Opens" value={formatNumber(campaign.stats.opens)} />
-        <MetricCard label="Clicks" value={formatNumber(campaign.stats.clicks)} />
-        <MetricCard label="Revenue" value={formatCurrency(campaign.stats.revenue)} />
+      {actionError ? (
+        <p className="mb-3 text-sm text-danger" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          label="Eligible audience"
+          value={
+            campaign.audience_count === null || campaign.audience_count === undefined
+              ? '—'
+              : formatNumber(campaign.audience_count)
+          }
+        />
+        <MetricCard label="Status" value={statusLabel(campaign.status)} />
+        <MetricCard label="Channel" value={String(campaign.channel || '').toUpperCase()} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink">Details</h3>
           <dl className="space-y-2 text-sm">
+            {campaign.channel === 'email' ? (
+              <>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Subject</dt>
+                  <dd className="text-right">{campaign.subject || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Preview text</dt>
+                  <dd className="text-right">{campaign.preview_text || '—'}</dd>
+                </div>
+              </>
+            ) : null}
             <div className="flex justify-between gap-3">
-              <dt className="text-muted">Subject</dt>
-              <dd>{campaign.subject || '—'}</dd>
+              <dt className="text-muted">Audience</dt>
+              <dd className="text-right">{audience}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted">Audience size</dt>
-              <dd>{formatNumber(campaign.audienceCount)}</dd>
+              <dt className="text-muted">Audience count</dt>
+              <dd>
+                {campaign.audience_count === null || campaign.audience_count === undefined
+                  ? '—'
+                  : formatNumber(campaign.audience_count)}
+              </dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Scheduled</dt>
-              <dd>{formatDateTime(campaign.scheduledAt)}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted">Sent</dt>
-              <dd>{formatDateTime(campaign.sentAt)}</dd>
+              <dd>{formatDateTime(campaign.scheduled_at)}</dd>
             </div>
           </dl>
         </Card>
 
         <Card>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Content preview</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Content</h3>
           <div className="rounded-md border border-line bg-midnight p-4">
-            <pre className="whitespace-pre-wrap font-sans text-sm text-muted">{campaign.content}</pre>
+            <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
+              {campaign.body || '—'}
+            </pre>
           </div>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete campaign?"
+        description="This draft will be removed. This cannot be undone from the UI."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={onDelete}
+      />
     </div>
   )
 }
