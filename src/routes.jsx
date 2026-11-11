@@ -1,4 +1,6 @@
 import { Navigate, useRoutes } from 'react-router-dom'
+import { GuestRoute } from './auth/GuestRoute'
+import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/layout/AppShell'
 import { DashboardPage } from './pages/DashboardPage'
 import { ContactsPage } from './pages/audience/ContactsPage'
@@ -23,12 +25,34 @@ import { StoreSettingsPage } from './pages/settings/StoreSettingsPage'
 import { StorefrontIntegrationPage } from './pages/settings/StorefrontIntegrationPage'
 import { ChannelSettingsPage } from './pages/settings/ChannelSettingsPage'
 import { AccountSettingsPage } from './pages/settings/AccountSettingsPage'
+import { LoginPage } from './pages/auth/LoginPage'
+import { RegisterPage } from './pages/auth/RegisterPage'
 
 export function AppRoutes() {
   return useRoutes([
     {
+      path: '/login',
+      element: (
+        <GuestRoute>
+          <LoginPage />
+        </GuestRoute>
+      ),
+    },
+    {
+      path: '/register',
+      element: (
+        <GuestRoute>
+          <RegisterPage />
+        </GuestRoute>
+      ),
+    },
+    {
       path: '/',
-      element: <AppShell />,
+      element: (
+        <ProtectedRoute>
+          <AppShell />
+        </ProtectedRoute>
+      ),
       children: [
         { index: true, element: <DashboardPage /> },
 

@@ -1,16 +1,43 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, HelpCircle, Menu, UserRound } from 'lucide-react'
-import { getCurrentUser, getStores } from '../../mock/workspace'
+import { useAuth } from '../../auth/useAuth'
+import { storeStatusLabel, storeStatusTone } from '../../lib/storesApi'
+import { useActiveStore } from '../../store/useActiveStore'
 import { Button } from '../ui/Button'
 import { Dropdown } from '../ui/Dropdown'
 import { Badge } from '../ui/Badge'
 import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 
-export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
-  const stores = getStores()
-  const user = getCurrentUser()
+export function Header({ onMenuClick }) {
+  const { stores, activeStore, selectStore, status } = useActiveStore()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [noticeOpen, setNoticeOpen] = useState(false)
-  const activeStore = stores.find((store) => store.id === activeStoreId) || stores[0]
+  const [signingOut, setSigningOut] = useState(false)
+
+  const onUserMenuSelect = async (item) => {
+    if (item.id === 'account') {
+      navigate('/settings/account')
+      return
+    }
+    if (item.id === 'logout') {
+      if (signingOut) return
+      setSigningOut(true)
+      try {
+        await logout()
+        navigate('/login', { replace: true })
+      } catch {
+        setSigningOut(false)
+      }
+    }
+  }
+
+  const storeLabel = (() => {
+    if (status === 'loading') return 'Loading stores…'
+    if (!activeStore) return 'No store selected'
+    return activeStore.name
+  })()
 
   return (
     <header className="relative sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-midnight/95 px-3 backdrop-blur sm:px-4">
@@ -25,20 +52,33 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
           <Menu className="size-4" />
         </Button>
 
-        <Dropdown
-          label={
-            <span className="flex max-w-[10rem] items-center gap-2 truncate sm:max-w-[14rem]">
-              <span className="truncate">{activeStore.name}</span>
-              <Badge tone="success">Mock</Badge>
-            </span>
-          }
-          align="left"
-          items={stores.map((store) => ({
-            id: store.id,
-            label: `${store.name} · ${store.domain}`,
-          }))}
-          onSelect={(item) => onStoreChange?.(item.id)}
-        />
+        {stores.length > 0 ? (
+          <Dropdown
+            label={
+              <span className="flex max-w-[12rem] items-center gap-2 truncate sm:max-w-[16rem]">
+                <span className="truncate">{storeLabel}</span>
+                {activeStore ? (
+                  <Badge tone={storeStatusTone(activeStore.connection_status)}>
+                    {storeStatusLabel(activeStore.connection_status)}
+                  </Badge>
+                ) : null}
+              </span>
+            }
+            align="left"
+            items={stores.map((store) => ({
+              id: store.id,
+              label: `${store.name} · ${store.domain || 'no domain'}`,
+            }))}
+            onSelect={(item) => {
+              void selectStore(item.id)
+            }}
+          />
+        ) : (
+          <span className="flex items-center gap-2 text-sm text-muted">
+            <span>No real stores yet</span>
+            <Badge tone="warning">Empty</Badge>
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -62,15 +102,17 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
               <span className="flex size-6 items-center justify-center rounded-full bg-secondary">
                 <UserRound className="size-3.5 text-muted" aria-hidden />
               </span>
-              <span className="hidden max-w-[8rem] truncate md:inline">{user.name}</span>
+              <span className="hidden max-w-[8rem] truncate md:inline">
+                {user?.name || 'Account'}
+              </span>
             </span>
           }
           items={[
-            { id: 'profile', label: `${user.email}` },
-            { id: 'role', label: `Role: ${user.role}` },
+            { id: 'profile', label: user?.email || 'Signed in', disabled: true },
             { id: 'account', label: 'Account settings' },
+            { id: 'logout', label: signingOut ? 'Signing out…' : 'Sign out' },
           ]}
-          onSelect={() => {}}
+          onSelect={onUserMenuSelect}
         />
       </div>
 
