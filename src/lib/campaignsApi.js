@@ -38,6 +38,7 @@ function requireCampaignId(campaignId) {
  *   subject?: string | null,
  *   preview_text?: string | null,
  *   body?: string | null,
+ *   content_document?: object | null,
  *   audience_type?: string,
  *   segment_id?: string | null,
  * }} payload
@@ -57,6 +58,9 @@ function campaignWriteBody(payload = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'body')) {
     body.body = typeof payload.body === 'string' ? payload.body : payload.body
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'content_document')) {
+    body.content_document = payload.content_document
   }
   if (typeof payload.audience_type === 'string' && payload.audience_type.trim() !== '') {
     body.audience_type = payload.audience_type.trim()
@@ -283,6 +287,35 @@ export async function duplicateCampaign(campaignId, deps = {}) {
   const path = audienceResourcePath('campaigns', id, 'duplicate')
   const response = await audienceFetch(path, { method: 'POST' }, deps)
   await assertAudienceOk(response, 'Unable to duplicate the campaign.')
+  return readAudienceResource(response, 'campaign')
+}
+
+/**
+ * POST /api/v1/campaigns/{id}/apply-template
+ * Snapshots template document/html onto a draft email campaign.
+ *
+ * @param {string} campaignId
+ * @param {{ email_template_id: string }} payload
+ * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
+ */
+export async function applyCampaignTemplate(campaignId, payload, deps = {}) {
+  const id = requireCampaignId(campaignId)
+  const templateId =
+    typeof payload?.email_template_id === 'string' ? payload.email_template_id.trim() : ''
+  if (!templateId) {
+    throw new ApiError('An email template id is required.', { status: 422 })
+  }
+  const path = audienceResourcePath('campaigns', id, 'apply-template')
+  const response = await audienceFetch(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_template_id: templateId }),
+    },
+    deps,
+  )
+  await assertAudienceOk(response, 'Unable to apply the email template.')
   return readAudienceResource(response, 'campaign')
 }
 

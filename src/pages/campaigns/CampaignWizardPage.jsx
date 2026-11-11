@@ -17,6 +17,7 @@ import {
 } from '../../components/ui'
 import { ApiError } from '../../lib/api'
 import {
+  applyCampaignTemplate,
   createStoreCampaign,
   getCampaign,
   previewCampaignAudience,
@@ -27,6 +28,8 @@ import { listStoreSegments } from '../../lib/segmentsApi'
 import { firstFieldError } from '../../lib/tagsUi'
 import { useActiveStore } from '../../store/useActiveStore'
 import { StarterMessagePicker } from '../../components/campaigns/StarterMessagePicker'
+import { EmailTemplatePicker } from '../../components/campaigns/EmailTemplatePicker'
+import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
 
 const steps = [
   { id: 'setup', label: 'Setup' },
@@ -44,6 +47,10 @@ function emptyForm(channel) {
     subject: isSms ? '' : '',
     previewText: '',
     body: '',
+    contentFormat: 'plain',
+    htmlBody: '',
+    contentDocument: null,
+    emailTemplateId: null,
     audienceType: ALL_ELIGIBLE,
     segmentId: '',
     scheduledAt: '',
@@ -94,8 +101,11 @@ export function CampaignWizardPage() {
   const [previewCount, setPreviewCount] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
+  const [persistedId, setPersistedId] = useState(campaignId || null)
+  const [applyingTemplateId, setApplyingTemplateId] = useState('')
 
   const stepIndex = steps.findIndex((item) => item.id === step)
+  const hasHtmlContent = !isSms && form.contentFormat === 'html' && Boolean(form.htmlBody?.trim())
 
   useEffect(() => {
     if (storeStatus === 'loading' || !storeId) return undefined
@@ -132,11 +142,16 @@ export function CampaignWizardPage() {
           return
         }
         setChannel(campaign.channel === 'sms' ? 'sms' : 'email')
+        setPersistedId(campaign.id)
         setForm({
           name: campaign.name || '',
           subject: campaign.subject || '',
           previewText: campaign.preview_text || '',
           body: campaign.body || '',
+          contentFormat: campaign.content_format === 'html' ? 'html' : 'plain',
+          htmlBody: campaign.html_body || '',
+          contentDocument: campaign.content_document || null,
+          emailTemplateId: campaign.email_template_id || null,
           audienceType: campaign.audience_type === 'segment' ? 'segment' : ALL_ELIGIBLE,
           segmentId: campaign.segment_id || '',
           scheduledAt: toDatetimeLocalValue(campaign.scheduled_at),
@@ -202,7 +217,9 @@ export function CampaignWizardPage() {
     }
     if (targetStep === 'content' || targetStep === 'schedule' || targetStep === 'review') {
       if (!isSms && !form.subject.trim()) nextErrors.subject = 'Subject is required for email.'
-      if (!form.body.trim()) nextErrors.body = 'Content is required.'
+      if (!form.body.trim() && !(form.contentFormat === 'html' && form.htmlBody?.trim())) {
+        nextErrors.body = 'Content is required.'
+      }
     }
     if (targetStep === 'schedule' || targetStep === 'review') {
       // schedule datetime is only required when scheduling, checked at submit
@@ -242,10 +259,55 @@ export function CampaignWizardPage() {
 
   const persistCampaign = async () => {
     const payload = buildPayload()
-    if (isEdit) {
-      return updateCampaign(campaignId, payload)
+    const id = persistedId || campaignId
+    if (id) {
+      const updated = await updateCampaign(id, payload)
+      setPersistedId(updated.id)
+      return updated
     }
-    return createStoreCampaign(storeId, payload)
+    const created = await createStoreCampaign(storeId, payload)
+    setPersistedId(created.id)
+    return created
+  }
+
+  const applyTemplate = async (template) => {
+    if (!storeId || applyingTemplateId || isSms) return
+    if (!form.name.trim()) {
+      setErrors((current) => ({ ...current, name: 'Campaign name is required.' }))
+      setStep('setup')
+      return
+    }
+    setApplyingTemplateId(template.id)
+    setActionError('')
+    try {
+      let id = persistedId || campaignId
+      if (!id) {
+        const created = await createStoreCampaign(storeId, {
+          ...buildPayload(),
+          channel: 'email',
+        })
+        id = created.id
+        setPersistedId(id)
+        navigate(`/campaigns/${id}/edit`, { replace: true })
+      }
+      const updated = await applyCampaignTemplate(id, { email_template_id: template.id })
+      setForm((current) => ({
+        ...current,
+        name: current.name,
+        subject: updated.subject || current.subject,
+        previewText: updated.preview_text || current.previewText,
+        body: updated.body || current.body,
+        contentFormat: updated.content_format === 'html' ? 'html' : 'plain',
+        htmlBody: updated.html_body || '',
+        contentDocument: updated.content_document || null,
+        emailTemplateId: updated.email_template_id || template.id,
+      }))
+      setErrors((current) => ({ ...current, body: undefined, subject: undefined }))
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to apply the template.')
+    } finally {
+      setApplyingTemplateId('')
+    }
   }
 
   const saveDraft = async () => {
@@ -484,6 +546,15 @@ export function CampaignWizardPage() {
             }}
           />
 
+          {!isSms ? (
+            <EmailTemplatePicker
+              storeId={storeId}
+              disabled={Boolean(applyingTemplateId) || submitting}
+              applyingId={applyingTemplateId}
+              onApply={applyTemplate}
+            />
+          ) : null}
+
           <div className="grid gap-3 lg:grid-cols-2">
             <Card className="space-y-3">
               {!isSms ? (
@@ -506,31 +577,45 @@ export function CampaignWizardPage() {
                   </FormField>
                 </>
               ) : null}
-              <FormField label={isSms ? 'SMS message' : 'Email body'} error={errors.body}>
+              <FormField
+                label={isSms ? 'SMS message' : hasHtmlContent ? 'Plain-text fallback' : 'Email body'}
+                error={errors.body}
+              >
                 <Textarea
-                  rows={12}
+                  rows={hasHtmlContent ? 6 : 12}
                   value={form.body}
                   onChange={(event) =>
                     setForm((value) => ({ ...value, body: event.target.value }))
                   }
                 />
               </FormField>
+              {hasHtmlContent ? (
+                <p className="text-xs text-muted">
+                  HTML template applied
+                  {form.emailTemplateId ? ` (from template ${form.emailTemplateId.slice(0, 8)}…)` : ''}.
+                  Edit the template under Resources to change the layout, then re-apply.
+                </p>
+              ) : null}
               {isSms ? (
                 <p className="text-xs text-muted">{form.body.length}/160 characters (soft limit)</p>
               ) : null}
             </Card>
             <Card>
               <h3 className="mb-3 text-sm font-semibold text-ink">Preview</h3>
-              <div className="rounded-md border border-line bg-midnight p-4">
-                {!isSms ? (
-                  <p className="mb-2 text-sm font-semibold text-ink">
-                    {form.subject || 'Subject'}
-                  </p>
-                ) : null}
-                <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
-                  {form.body || 'Message body'}
-                </pre>
-              </div>
+              {hasHtmlContent ? (
+                <EmailHtmlPreview html={form.htmlBody} className="min-h-[420px]" />
+              ) : (
+                <div className="rounded-md border border-line bg-midnight p-4">
+                  {!isSms ? (
+                    <p className="mb-2 text-sm font-semibold text-ink">
+                      {form.subject || 'Subject'}
+                    </p>
+                  ) : null}
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
+                    {form.body || 'Message body'}
+                  </pre>
+                </div>
+              )}
             </Card>
           </div>
         </div>
