@@ -40,7 +40,10 @@ export function statusTone(status) {
     scheduled: 'info',
     draft: 'warning',
     paused: 'warning',
+    pending: 'warning',
+    processing: 'info',
     non_subscribed: 'neutral',
+    nonsubscribed: 'neutral',
     unsubscribed: 'danger',
     failed: 'danger',
   }
