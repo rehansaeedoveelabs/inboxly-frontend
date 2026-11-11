@@ -93,7 +93,14 @@ describe('campaignsApi', () => {
     })
 
     const summary = await getCampaignsSummary('01STORE', { fetchFn })
-    assert.deepEqual(summary, { total: 5, draft: 3, scheduled: 2 })
+    assert.deepEqual(summary, {
+      total: 5,
+      draft: 3,
+      scheduled: 2,
+      sending: 0,
+      sent: 0,
+      failed: 0,
+    })
   })
 
   it('creates and updates campaigns', async () => {
