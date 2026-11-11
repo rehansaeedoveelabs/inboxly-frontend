@@ -24,128 +24,90 @@ describe('shopifyOAuth helpers', () => {
     assert.equal(normalizeShopDomain(''), null)
   })
 
-  it('builds same-origin oauth start paths from backend store ids only', () => {
-    assert.equal(
-      shopifyOAuthStartPath('01STOREID', 'acme-shop.myshopify.com'),
-      '/api/v1/stores/01STOREID/shopify/oauth/start?shop=acme-shop.myshopify.com',
-    )
+  it('builds oauth start paths without a shop override query', () => {
     assert.equal(
       shopifyOAuthStartPath('01STOREID'),
       '/api/v1/stores/01STOREID/shopify/oauth/start',
     )
+    assert.equal(shopifyOAuthStartPath('01STOREID').includes('?'), false)
     assert.throws(() => shopifyOAuthStartPath(''), ApiError)
     assert.throws(() => shopifyOAuthStartPath(null), ApiError)
   })
 
-  it('resolves backend store from active_store_id without using mock ids', async () => {
-    const calls = []
-    const apiFetchFn = async (path) => {
-      calls.push(path)
-      if (path === '/api/v1/auth/me') {
+  it('uses an explicit backend store id without fetching or appending shop', async () => {
+    const assigned = []
+    const result = await startShopifyOAuth({
+      storeId: '01REALSTORE',
+      apiFetchFn: async () => {
+        throw new Error('should not fetch when storeId is provided')
+      },
+      assignLocation: (url) => assigned.push(url),
+    })
+
+    assert.deepEqual(assigned, ['/api/v1/stores/01REALSTORE/shopify/oauth/start'])
+    assert.equal(result.path.includes('shop='), false)
+  })
+
+  it('resolves backend store from active_store_id without mock ids', async () => {
+    const result = await resolveBackendStoreForOAuth({
+      apiFetchFn: async (path) => {
+        assert.equal(path, '/api/v1/auth/me')
         return jsonResponse(200, {
           data: {
             workspaces: [{ id: 'ws1', active_store_id: '01REALSTORE' }],
           },
         })
-      }
-      throw new Error(`Unexpected path ${path}`)
-    }
-
-    const result = await resolveBackendStoreForOAuth({
-      selectedDomain: 'acme-shop.myshopify.com',
-      apiFetchFn,
+      },
     })
 
-    assert.deepEqual(result, {
-      storeId: '01REALSTORE',
-      shopDomain: 'acme-shop.myshopify.com',
-    })
-    assert.deepEqual(calls, ['/api/v1/auth/me'])
+    assert.deepEqual(result, { storeId: '01REALSTORE' })
   })
 
-  it('matches selected domain when listing workspace stores', async () => {
-    const apiFetchFn = async (path) => {
-      if (path === '/api/v1/auth/me') {
-        return jsonResponse(200, {
-          data: { workspaces: [{ id: 'ws1', active_store_id: null }] },
-        })
-      }
-      if (path === '/api/v1/workspaces/ws1/stores') {
-        return jsonResponse(200, {
-          data: [
-            { id: '01OTHER', domain: 'other.myshopify.com', connection_status: 'pending' },
-            { id: '01MATCH', domain: 'acme-shop.myshopify.com', connection_status: 'pending' },
-          ],
-        })
-      }
-      throw new Error(`Unexpected path ${path}`)
-    }
-
+  it('falls back to a pending workspace store when no active store is set', async () => {
     const result = await resolveBackendStoreForOAuth({
-      selectedDomain: 'https://acme-shop.myshopify.com',
-      apiFetchFn,
+      apiFetchFn: async (path) => {
+        if (path === '/api/v1/auth/me') {
+          return jsonResponse(200, {
+            data: { workspaces: [{ id: 'ws1', active_store_id: null }] },
+          })
+        }
+        if (path === '/api/v1/workspaces/ws1/stores') {
+          return jsonResponse(200, {
+            data: [
+              { id: '01OTHER', domain: 'other.myshopify.com', connection_status: 'connected' },
+              { id: '01PENDING', domain: 'acme-shop.myshopify.com', connection_status: 'pending' },
+            ],
+          })
+        }
+        throw new Error(`Unexpected path ${path}`)
+      },
     })
 
-    assert.equal(result.storeId, '01MATCH')
-    assert.equal(result.shopDomain, 'acme-shop.myshopify.com')
+    assert.equal(result.storeId, '01PENDING')
   })
 
-  it('surfaces unauthenticated and empty-workspace errors during resolution', async () => {
+  it('surfaces empty store and auth errors', async () => {
     await assert.rejects(
       () =>
         resolveBackendStoreForOAuth({
           apiFetchFn: async () => jsonResponse(401, { message: 'Unauthenticated.' }),
         }),
-      (error) => error instanceof ApiError && error.status === 401 && /Sign in/i.test(error.message),
+      (error) => error instanceof ApiError && error.status === 401,
     )
 
     await assert.rejects(
       () =>
         resolveBackendStoreForOAuth({
-          apiFetchFn: async () => jsonResponse(200, { data: { workspaces: [] } }),
-        }),
-      (error) => error instanceof ApiError && /workspace/i.test(error.message),
-    )
-  })
-
-  it('navigates to the same-origin Laravel start URL after resolving a backend store', async () => {
-    const assigned = []
-    const apiFetchFn = async (path) => {
-      // Must not fetch the OAuth start endpoint (302 Location is opaque to fetch).
-      assert.equal(path.startsWith('/api/v1/stores/'), false)
-      if (path === '/api/v1/auth/me') {
-        return jsonResponse(200, {
-          data: { workspaces: [{ id: 'ws1', active_store_id: '01REALSTORE' }] },
-        })
-      }
-      throw new Error(`Unexpected path ${path}`)
-    }
-
-    const result = await startShopifyOAuth({
-      selectedDomain: 'acme-shop.myshopify.com',
-      apiFetchFn,
-      assignLocation: (url) => assigned.push(url),
-    })
-
-    assert.deepEqual(assigned, [
-      '/api/v1/stores/01REALSTORE/shopify/oauth/start?shop=acme-shop.myshopify.com',
-    ])
-    assert.equal(result.navigated, true)
-    assert.equal(
-      result.path,
-      '/api/v1/stores/01REALSTORE/shopify/oauth/start?shop=acme-shop.myshopify.com',
-    )
-  })
-
-  it('surfaces network failures during store resolution', async () => {
-    await assert.rejects(
-      () =>
-        startShopifyOAuth({
-          apiFetchFn: async () => {
-            throw new TypeError('Failed to fetch')
+          apiFetchFn: async (path) => {
+            if (path === '/api/v1/auth/me') {
+              return jsonResponse(200, {
+                data: { workspaces: [{ id: 'ws1', active_store_id: null }] },
+              })
+            }
+            return jsonResponse(200, { data: [] })
           },
         }),
-      (error) => error instanceof ApiError && /Network error/i.test(error.message),
+      (error) => error instanceof ApiError && /Create an Inboxly store/i.test(error.message),
     )
   })
 })

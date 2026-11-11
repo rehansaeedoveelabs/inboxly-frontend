@@ -2,19 +2,19 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, HelpCircle, Menu, UserRound } from 'lucide-react'
 import { useAuth } from '../../auth/useAuth'
-import { getStores } from '../../mock/workspace'
+import { storeStatusLabel, storeStatusTone } from '../../lib/storesApi'
+import { useActiveStore } from '../../store/useActiveStore'
 import { Button } from '../ui/Button'
 import { Dropdown } from '../ui/Dropdown'
 import { Badge } from '../ui/Badge'
 import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 
-export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
-  const stores = getStores()
+export function Header({ onMenuClick }) {
+  const { stores, activeStore, selectStore, status } = useActiveStore()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
-  const activeStore = stores.find((store) => store.id === activeStoreId) || stores[0]
 
   const onUserMenuSelect = async (item) => {
     if (item.id === 'account') {
@@ -33,6 +33,12 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
     }
   }
 
+  const storeLabel = (() => {
+    if (status === 'loading') return 'Loading stores…'
+    if (!activeStore) return 'No store selected'
+    return activeStore.name
+  })()
+
   return (
     <header className="relative sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-midnight/95 px-3 backdrop-blur sm:px-4">
       <div className="flex min-w-0 items-center gap-2">
@@ -46,20 +52,33 @@ export function Header({ onMenuClick, activeStoreId, onStoreChange }) {
           <Menu className="size-4" />
         </Button>
 
-        <Dropdown
-          label={
-            <span className="flex max-w-[10rem] items-center gap-2 truncate sm:max-w-[14rem]">
-              <span className="truncate">{activeStore.name}</span>
-              <Badge tone="success">Mock</Badge>
-            </span>
-          }
-          align="left"
-          items={stores.map((store) => ({
-            id: store.id,
-            label: `${store.name} · ${store.domain}`,
-          }))}
-          onSelect={(item) => onStoreChange?.(item.id)}
-        />
+        {stores.length > 0 ? (
+          <Dropdown
+            label={
+              <span className="flex max-w-[12rem] items-center gap-2 truncate sm:max-w-[16rem]">
+                <span className="truncate">{storeLabel}</span>
+                {activeStore ? (
+                  <Badge tone={storeStatusTone(activeStore.connection_status)}>
+                    {storeStatusLabel(activeStore.connection_status)}
+                  </Badge>
+                ) : null}
+              </span>
+            }
+            align="left"
+            items={stores.map((store) => ({
+              id: store.id,
+              label: `${store.name} · ${store.domain || 'no domain'}`,
+            }))}
+            onSelect={(item) => {
+              void selectStore(item.id)
+            }}
+          />
+        ) : (
+          <span className="flex items-center gap-2 text-sm text-muted">
+            <span>No real stores yet</span>
+            <Badge tone="warning">Empty</Badge>
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">

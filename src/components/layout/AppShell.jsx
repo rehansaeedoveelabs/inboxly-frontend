@@ -1,20 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { getStores } from '../../mock/workspace'
-import { ActiveStoreProvider } from '../../store/ActiveStoreProvider'
+import { WorkspaceStoresProvider } from '../../store/WorkspaceStoresProvider'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 
 export function AppShell() {
-  const stores = getStores()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [activeStoreId, setActiveStoreId] = useState(stores[0]?.id)
-
-  const activeStore = useMemo(
-    () => stores.find((store) => store.id === activeStoreId) ?? stores[0] ?? null,
-    [stores, activeStoreId],
-  )
 
   useEffect(() => {
     const onResize = () => {
@@ -25,14 +17,7 @@ export function AppShell() {
   }, [])
 
   return (
-    <ActiveStoreProvider
-      value={{
-        stores,
-        activeStoreId: activeStore?.id ?? null,
-        activeStore,
-        setActiveStoreId,
-      }}
-    >
+    <WorkspaceStoresProvider>
       <div className="flex min-h-full bg-midnight text-ink">
         <Sidebar
           mobileOpen={mobileOpen}
@@ -42,11 +27,7 @@ export function AppShell() {
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <Header
-            onMenuClick={() => setMobileOpen(true)}
-            activeStoreId={activeStore?.id}
-            onStoreChange={setActiveStoreId}
-          />
+          <Header onMenuClick={() => setMobileOpen(true)} />
           <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 lg:px-6">
             <div className="mx-auto w-full max-w-[1400px]">
               <Outlet />
@@ -54,6 +35,6 @@ export function AppShell() {
           </main>
         </div>
       </div>
-    </ActiveStoreProvider>
+    </WorkspaceStoresProvider>
   )
 }

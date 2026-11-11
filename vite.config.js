@@ -15,7 +15,7 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    allowedHosts: ['cohen-raises-attempting-administrators.trycloudflare.com'],
+    allowedHosts: ['liquid-salad-idealness.ngrok-free.dev'],
     proxy: {
       // Sanctum only starts a session when Origin/Referer matches
       // SANCTUM_STATEFUL_DOMAINS. Tunnel hosts change often, so normalize to

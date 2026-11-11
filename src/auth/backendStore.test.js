@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { findActiveBackendStoreId, userHasWorkspace } from './backendStore.js'
+import {
+  findActiveBackendStoreId,
+  getPrimaryWorkspace,
+  userHasWorkspace,
+} from './backendStore.js'
 
 describe('backendStore helpers', () => {
-  it('never invents store ids from missing workspace data', () => {
+  it('never invents store or workspace ids from missing data', () => {
+    assert.equal(getPrimaryWorkspace(null), null)
     assert.equal(findActiveBackendStoreId(null), null)
-    assert.equal(findActiveBackendStoreId({ workspaces: [] }), null)
+    assert.equal(userHasWorkspace({ workspaces: [] }), false)
     assert.equal(
       findActiveBackendStoreId({
         workspaces: [{ id: '01WS', active_store_id: null }],
@@ -14,21 +19,16 @@ describe('backendStore helpers', () => {
     )
   })
 
-  it('returns the first real active_store_id ULID', () => {
-    assert.equal(
-      findActiveBackendStoreId({
-        workspaces: [
-          { id: '01WS', active_store_id: null },
-          { id: '01WS2', active_store_id: '01REALSTORE' },
-        ],
-      }),
-      '01REALSTORE',
-    )
-  })
+  it('returns the primary workspace and active store ULID when present', () => {
+    const user = {
+      workspaces: [
+        { id: '01WS', name: 'Acme', active_store_id: '01REALSTORE' },
+        { id: '01WS2', active_store_id: '01OTHER' },
+      ],
+    }
 
-  it('detects whether the user has any workspace', () => {
-    assert.equal(userHasWorkspace({ workspaces: [{ id: '01WS' }] }), true)
-    assert.equal(userHasWorkspace({ workspaces: [] }), false)
-    assert.equal(userHasWorkspace(null), false)
+    assert.equal(getPrimaryWorkspace(user).id, '01WS')
+    assert.equal(findActiveBackendStoreId(user), '01REALSTORE')
+    assert.equal(userHasWorkspace(user), true)
   })
 })
