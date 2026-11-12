@@ -58,6 +58,7 @@ export function AppRoutes() {
 
         { path: 'campaigns', element: <CampaignsPage /> },
         { path: 'campaigns/new/:channel', element: <CampaignWizardPage /> },
+        { path: 'campaigns/:campaignId/edit', element: <CampaignWizardPage /> },
         { path: 'campaigns/:campaignId', element: <CampaignDetailPage /> },
 
         { path: 'automation', element: <AutomationsPage /> },
