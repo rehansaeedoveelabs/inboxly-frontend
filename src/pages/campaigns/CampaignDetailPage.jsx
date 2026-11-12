@@ -18,6 +18,8 @@ import {
   duplicateCampaign,
   formatCampaignAudience,
   getCampaign,
+  sendCampaign,
+  testSendCampaign,
   unscheduleCampaign,
 } from '../../lib/campaignsApi'
 import { listStoreSegments } from '../../lib/segmentsApi'
@@ -39,6 +41,8 @@ export function CampaignDetailPage() {
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmSend, setConfirmSend] = useState(false)
+  const [testNotice, setTestNotice] = useState('')
   const [refreshNonce, setRefreshNonce] = useState(0)
 
   const reload = useCallback(() => {
@@ -126,6 +130,40 @@ export function CampaignDetailPage() {
     navigate('/campaigns')
   }
 
+  const onTestSend = async () => {
+    if (!campaign || busy) return
+    setBusy(true)
+    setActionError('')
+    setTestNotice('')
+    try {
+      const result = await testSendCampaign(campaign.id)
+      if (result.accepted) {
+        setTestNotice(`Test email accepted for ${result.to}.`)
+      } else {
+        setActionError(result.error_message || 'Test send was rejected.')
+      }
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to send test email.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSendNow = async () => {
+    if (!campaign || busy) return
+    setBusy(true)
+    setActionError('')
+    setConfirmSend(false)
+    try {
+      const updated = await sendCampaign(campaign.id)
+      setCampaign(updated)
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to send the campaign.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (storeStatus === 'loading' || loading) {
     return <LoadingState label="Loading campaign…" />
   }
@@ -160,6 +198,8 @@ export function CampaignDetailPage() {
 
   const isDraft = campaign.status === 'draft'
   const isScheduled = campaign.status === 'scheduled'
+  const isEmail = campaign.channel === 'email'
+  const canSendEmail = isEmail && (isDraft || isScheduled)
   const audience = formatCampaignAudience(campaign, segmentNames)
 
   return (
@@ -187,6 +227,16 @@ export function CampaignDetailPage() {
                 Unschedule
               </Button>
             ) : null}
+            {isEmail && isDraft ? (
+              <Button variant="secondary" disabled={busy} onClick={onTestSend}>
+                Send test
+              </Button>
+            ) : null}
+            {canSendEmail ? (
+              <Button disabled={busy} onClick={() => setConfirmSend(true)}>
+                Send now
+              </Button>
+            ) : null}
             <Button variant="secondary" disabled={busy} onClick={onDuplicate}>
               Duplicate
             </Button>
@@ -204,6 +254,18 @@ export function CampaignDetailPage() {
           {actionError}
         </p>
       ) : null}
+      {testNotice ? (
+        <p className="mb-3 text-sm text-success" role="status">
+          {testNotice}
+        </p>
+      ) : null}
+
+      {!isEmail ? (
+        <p className="mb-3 rounded-md border border-line bg-midnight px-3 py-2 text-sm text-muted" role="status">
+          SMS sending is not available yet. You can still draft and schedule SMS campaigns; delivery
+          will be enabled when an SMS provider is connected.
+        </p>
+      ) : null}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard
@@ -216,6 +278,15 @@ export function CampaignDetailPage() {
         />
         <MetricCard label="Status" value={statusLabel(campaign.status)} />
         <MetricCard label="Channel" value={String(campaign.channel || '').toUpperCase()} />
+        {campaign.sent_count != null ? (
+          <MetricCard label="Sent" value={formatNumber(campaign.sent_count)} />
+        ) : null}
+        {campaign.failed_count != null ? (
+          <MetricCard label="Failed" value={formatNumber(campaign.failed_count)} />
+        ) : null}
+        {campaign.skipped_count != null ? (
+          <MetricCard label="Skipped" value={formatNumber(campaign.skipped_count)} />
+        ) : null}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -275,6 +346,15 @@ export function CampaignDetailPage() {
         confirmLabel="Delete"
         tone="danger"
         onConfirm={onDelete}
+      />
+
+      <ConfirmDialog
+        open={confirmSend}
+        onClose={() => setConfirmSend(false)}
+        title="Send campaign now?"
+        description="This queues delivery to the eligible audience. Requires messaging to be enabled on the server (Brevo for email)."
+        confirmLabel="Send now"
+        onConfirm={onSendNow}
       />
     </div>
   )

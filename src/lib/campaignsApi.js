@@ -106,7 +106,14 @@ export async function listStoreCampaigns(storeId, params = {}, deps = {}) {
  *
  * @param {string} storeId
  * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
- * @returns {Promise<{ total: number, draft: number, scheduled: number }>}
+ * @returns {Promise<{
+ *   total: number,
+ *   draft: number,
+ *   scheduled: number,
+ *   sending?: number,
+ *   sent?: number,
+ *   failed?: number,
+ * }>}
  */
 export async function getCampaignsSummary(storeId, deps = {}) {
   const path = storeAudiencePath(storeId, 'campaigns/summary')
@@ -122,7 +129,14 @@ export async function getCampaignsSummary(storeId, deps = {}) {
       body: payload,
     })
   }
-  return { total, draft, scheduled }
+  return {
+    total,
+    draft,
+    scheduled,
+    sending: typeof payload.sending === 'number' ? payload.sending : 0,
+    sent: typeof payload.sent === 'number' ? payload.sent : 0,
+    failed: typeof payload.failed === 'number' ? payload.failed : 0,
+  }
 }
 
 /**
@@ -317,6 +331,48 @@ export async function applyCampaignTemplate(campaignId, payload, deps = {}) {
   )
   await assertAudienceOk(response, 'Unable to apply the email template.')
   return readAudienceResource(response, 'campaign')
+}
+
+/**
+ * POST /api/v1/campaigns/{id}/send
+ *
+ * @param {string} campaignId
+ * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
+ */
+export async function sendCampaign(campaignId, deps = {}) {
+  const id = requireCampaignId(campaignId)
+  const path = audienceResourcePath('campaigns', id, 'send')
+  const response = await audienceFetch(path, { method: 'POST' }, deps)
+  await assertAudienceOk(response, 'Unable to send the campaign.')
+  return readAudienceResource(response, 'campaign')
+}
+
+/**
+ * POST /api/v1/campaigns/{id}/test-send
+ * Always targets the authenticated user's verified email (no recipient override).
+ *
+ * @param {string} campaignId
+ * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
+ */
+export async function testSendCampaign(campaignId, deps = {}) {
+  const id = requireCampaignId(campaignId)
+  const path = audienceResourcePath('campaigns', id, 'test-send')
+  const response = await audienceFetch(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+    deps,
+  )
+  await assertAudienceOk(response, 'Unable to send the test email.')
+  const result = await readAudienceJson(response)
+  const data = result?.data
+  if (!data || typeof data !== 'object') {
+    throw new ApiError('Invalid test-send response.', { status: response.status, body: result })
+  }
+  return data
 }
 
 /**
