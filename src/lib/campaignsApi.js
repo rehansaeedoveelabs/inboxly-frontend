@@ -349,24 +349,20 @@ export async function sendCampaign(campaignId, deps = {}) {
 
 /**
  * POST /api/v1/campaigns/{id}/test-send
+ * Always targets the authenticated user's verified email (no recipient override).
  *
  * @param {string} campaignId
- * @param {{ to?: string | null }} [payload]
  * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
  */
-export async function testSendCampaign(campaignId, payload = {}, deps = {}) {
+export async function testSendCampaign(campaignId, deps = {}) {
   const id = requireCampaignId(campaignId)
-  const body = {}
-  if (typeof payload.to === 'string' && payload.to.trim() !== '') {
-    body.to = payload.to.trim()
-  }
   const path = audienceResourcePath('campaigns', id, 'test-send')
   const response = await audienceFetch(
     path,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({}),
     },
     deps,
   )

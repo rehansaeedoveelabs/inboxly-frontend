@@ -198,8 +198,8 @@ export function CampaignDetailPage() {
 
   const isDraft = campaign.status === 'draft'
   const isScheduled = campaign.status === 'scheduled'
-  const canSend = isDraft || isScheduled
   const isEmail = campaign.channel === 'email'
+  const canSendEmail = isEmail && (isDraft || isScheduled)
   const audience = formatCampaignAudience(campaign, segmentNames)
 
   return (
@@ -232,7 +232,7 @@ export function CampaignDetailPage() {
                 Send test
               </Button>
             ) : null}
-            {canSend ? (
+            {canSendEmail ? (
               <Button disabled={busy} onClick={() => setConfirmSend(true)}>
                 Send now
               </Button>
@@ -257,6 +257,13 @@ export function CampaignDetailPage() {
       {testNotice ? (
         <p className="mb-3 text-sm text-success" role="status">
           {testNotice}
+        </p>
+      ) : null}
+
+      {!isEmail ? (
+        <p className="mb-3 rounded-md border border-line bg-midnight px-3 py-2 text-sm text-muted" role="status">
+          SMS sending is not available yet. You can still draft and schedule SMS campaigns; delivery
+          will be enabled when an SMS provider is connected.
         </p>
       ) : null}
 
