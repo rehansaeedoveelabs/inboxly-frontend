@@ -26,6 +26,7 @@ import { listStoreSegments } from '../../lib/segmentsApi'
 import { formatDateTime, formatNumber, statusLabel, statusTone } from '../../lib/format'
 import { useActiveStore } from '../../store/useActiveStore'
 import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
+import { CampaignFacebookPublishPanel } from '../../components/campaigns/CampaignFacebookPublishPanel'
 
 export function CampaignDetailPage() {
   const { campaignId } = useParams()
@@ -337,6 +338,11 @@ export function CampaignDetailPage() {
           )}
         </Card>
       </div>
+
+      <CampaignFacebookPublishPanel
+        campaign={campaign}
+        onCampaignUpdated={(updated) => setCampaign(updated)}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

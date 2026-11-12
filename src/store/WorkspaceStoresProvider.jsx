@@ -20,7 +20,7 @@ export function WorkspaceStoresProvider({ children }) {
       setActiveStoreId(null)
       setStatus('ready')
       setError('')
-      return []
+      return { stores: [], ok: true }
     }
 
     setStatus('loading')
@@ -42,13 +42,13 @@ export function WorkspaceStoresProvider({ children }) {
       })
 
       setStatus('ready')
-      return realStores
+      return { stores: realStores, ok: true }
     } catch (err) {
       setStores([])
       setActiveStoreId(null)
       setStatus('error')
       setError(err instanceof ApiError ? err.message : 'Unable to load stores.')
-      return []
+      return { stores: [], ok: false }
     }
   }, [isAuthenticated, workspace])
 

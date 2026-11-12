@@ -7,7 +7,7 @@ export const ActiveStoreContext = createContext({
   activeStore: null,
   status: 'loading',
   error: '',
-  refreshStores: async () => {},
+  refreshStores: async () => ({ stores: [], ok: true }),
   createStore: async () => null,
   selectStore: async () => {},
 })

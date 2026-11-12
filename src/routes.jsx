@@ -25,6 +25,7 @@ import { EmailTemplatesPage } from './pages/resources/EmailTemplatesPage'
 import { EmailTemplateEditorPage } from './pages/resources/EmailTemplateEditorPage'
 import { StoreSettingsPage } from './pages/settings/StoreSettingsPage'
 import { StorefrontIntegrationPage } from './pages/settings/StorefrontIntegrationPage'
+import { MetaIntegrationPage } from './pages/settings/MetaIntegrationPage'
 import { ChannelSettingsPage } from './pages/settings/ChannelSettingsPage'
 import { AccountSettingsPage } from './pages/settings/AccountSettingsPage'
 import { LoginPage } from './pages/auth/LoginPage'
@@ -89,6 +90,7 @@ export function AppRoutes() {
 
         { path: 'settings/store', element: <StoreSettingsPage /> },
         { path: 'settings/storefront', element: <StorefrontIntegrationPage /> },
+        { path: 'settings/meta', element: <MetaIntegrationPage /> },
         { path: 'settings/channels', element: <ChannelSettingsPage /> },
         { path: 'settings/account', element: <AccountSettingsPage /> },
 
