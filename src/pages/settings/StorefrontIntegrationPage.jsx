@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Cable, ExternalLink, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import {
@@ -13,11 +13,35 @@ import { ApiError } from '../../lib/api'
 import { formatDateTime } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { startShopifyOAuth } from '../../lib/shopifyOAuth'
+import {
+  createShopifyOAuthReturnGate,
+  hasHistoricalOrderAccess,
+  resolveShopifyOAuthCallback,
+  shopifyPermissionSummary,
+} from '../../lib/shopifyScopes'
 import { disconnectShopifyStore, storeStatusLabel, storeStatusTone } from '../../lib/storesApi'
 import { getStorefrontIntegration } from '../../mock'
 import { useActiveStore } from '../../store/useActiveStore'
 
-function StatusRow({ label, value, ok, detail }) {
+function StatusRow({ label, value, ok, detail, tone }) {
+  const resolvedTone = tone ?? (ok ? 'success' : 'danger')
+  const Icon =
+    resolvedTone === 'success'
+      ? CheckCircle2
+      : resolvedTone === 'warning'
+        ? AlertTriangle
+        : resolvedTone === 'neutral'
+          ? CheckCircle2
+          : XCircle
+  const iconClass =
+    resolvedTone === 'success'
+      ? 'text-success'
+      : resolvedTone === 'warning'
+        ? 'text-cantaloupe-ink'
+        : resolvedTone === 'neutral'
+          ? 'text-muted'
+          : 'text-danger'
+
   return (
     <div className="flex items-start justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-3">
       <div className="min-w-0">
@@ -25,12 +49,8 @@ function StatusRow({ label, value, ok, detail }) {
         {detail ? <p className="mt-0.5 text-xs text-muted">{detail}</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {ok ? (
-          <CheckCircle2 className="size-4 text-success" aria-hidden />
-        ) : (
-          <XCircle className="size-4 text-danger" aria-hidden />
-        )}
-        <Badge tone={ok ? 'success' : 'danger'}>{value}</Badge>
+        <Icon className={cn('size-4', iconClass)} aria-hidden />
+        <Badge tone={resolvedTone}>{value}</Badge>
       </div>
     </div>
   )
@@ -54,30 +74,97 @@ export function StorefrontIntegrationPage() {
   const [disconnecting, setDisconnecting] = useState(false)
   const [connectError, setConnectError] = useState('')
   const [disconnectFlash, setDisconnectFlash] = useState(null)
+  const [oauthFlash, setOauthFlash] = useState(null)
+  const oauthGateRef = useRef(createShopifyOAuthReturnGate())
+  const selectedStoreIdRef = useRef(null)
   const { activeStore, stores, status, workspace, refreshStores } = useActiveStore()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  const oauthFlash = useMemo(() => {
+  useEffect(() => {
+    selectedStoreIdRef.current = activeStore?.id ?? null
+  }, [activeStore?.id])
+
+  useEffect(() => {
     const shopify = searchParams.get('shopify')
-    if (shopify === 'connected') {
-      return { tone: 'success', message: 'Shopify connection completed for the selected store.' }
-    }
-    if (shopify === 'error') {
-      const reason = searchParams.get('reason') || 'unknown'
-      return {
-        tone: 'danger',
-        message: `Shopify connection did not complete (${reason}). The store stays unconnected until verification succeeds.`,
+    if (!shopify) return
+
+    const reason = searchParams.get('reason')
+    const callbackStoreId = searchParams.get('store_id')
+    const handleKey = `${shopify}:${reason ?? ''}:${callbackStoreId ?? ''}`
+    const gate = oauthGateRef.current
+    const begin = gate.begin(handleKey)
+    if (begin !== 'run') return
+
+    let abandoned = false
+
+    ;(async () => {
+      setConnectError('')
+      setDisconnectFlash(null)
+
+      let refreshFailed = false
+      let refreshedStores = []
+      try {
+        const result = await refreshStores()
+        if (result && typeof result === 'object' && Array.isArray(result.stores)) {
+          refreshedStores = result.stores
+          refreshFailed = result.ok === false
+        } else {
+          // Unexpected return shape — do not treat as a verified store list.
+          refreshFailed = true
+          refreshedStores = []
+        }
+      } catch {
+        refreshFailed = true
+        refreshedStores = []
       }
+
+      if (abandoned) {
+        gate.abandon(handleKey)
+        return
+      }
+
+      const outcome = resolveShopifyOAuthCallback({
+        shopify,
+        reason,
+        callbackStoreId,
+        stores: refreshedStores,
+        refreshFailed,
+        selectedStoreId: selectedStoreIdRef.current,
+      })
+
+      if (abandoned) {
+        gate.abandon(handleKey)
+        return
+      }
+
+      if (outcome.flash) {
+        setOauthFlash(outcome.flash)
+      }
+
+      gate.complete(handleKey)
+
+      if (outcome.clearUrl) {
+        navigate('/settings/storefront', { replace: true })
+      }
+    })()
+
+    return () => {
+      // activeStore changes must not permanently suppress retry: abandon only
+      // clears in-flight. Completion is recorded after flash/URL handling.
+      abandoned = true
+      gate.abandon(handleKey)
     }
-    return null
-  }, [searchParams])
+  }, [searchParams, refreshStores, navigate])
 
   const statusFlash = disconnectFlash || oauthFlash
 
   const storeConnected = Boolean(activeStore?.is_connected)
   const canStartOAuth = canConnectStore(activeStore)
   const canReconnect = canReconnectStore(activeStore)
+  const permissions = shopifyPermissionSummary(activeStore)
+  const needsReauth = permissions.state === 'needs_reauth'
+  const historicalOrders = hasHistoricalOrderAccess(activeStore)
 
   const embedOk = integration.appEmbedEnabled
   const trackingOk = integration.storefrontTracking === 'active'
@@ -107,6 +194,7 @@ export function StorefrontIntegrationPage() {
     const allowed = reconnect ? canReconnect : canStartOAuth
     if (!allowed || !activeStore?.id) return
     setConnectError('')
+    setOauthFlash(null)
     setConnecting(true)
     try {
       await startShopifyOAuth({ storeId: activeStore.id })
@@ -138,6 +226,7 @@ export function StorefrontIntegrationPage() {
     if (!confirmed) return
 
     setConnectError('')
+    setOauthFlash(null)
     setDisconnectFlash(null)
     setDisconnecting(true)
     try {
@@ -220,10 +309,11 @@ export function StorefrontIntegrationPage() {
                 <span className="font-mono text-ink">{activeStore.domain}</span>
                 {workspace?.name ? <> · workspace {workspace.name}</> : null}
               </p>
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge tone={storeStatusTone(activeStore.connection_status)}>
                   {storeStatusLabel(activeStore.connection_status)}
                 </Badge>
+                {needsReauth ? <Badge tone="warning">Permissions incomplete</Badge> : null}
               </div>
             </div>
             {canStartOAuth ? (
@@ -235,12 +325,16 @@ export function StorefrontIntegrationPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="success">Connected</Badge>
                 <Button
-                  variant="secondary"
+                  variant={needsReauth ? 'primary' : 'secondary'}
                   onClick={() => connectShopify({ reconnect: true })}
                   disabled={connecting || disconnecting}
                 >
                   <Cable className="size-4" />
-                  {connecting ? 'Redirecting to Shopify…' : 'Reconnect'}
+                  {connecting
+                    ? 'Redirecting to Shopify…'
+                    : needsReauth
+                      ? 'Reconnect Shopify'
+                      : 'Reconnect'}
                 </Button>
                 <Button
                   variant="secondary"
@@ -275,6 +369,93 @@ export function StorefrontIntegrationPage() {
           </div>
         ) : null}
       </Card>
+
+      {storeConnected ? (
+        <Card className="mb-4 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">Shopify permissions</h3>
+              <p className="mt-1 text-xs text-muted">
+                Connection status and permission status are separate. Granted scopes come from
+                Shopify after OAuth or reconnect — Inboxly never invents them.
+              </p>
+            </div>
+            <Badge tone={needsReauth ? 'warning' : 'success'}>{permissions.label}</Badge>
+          </div>
+
+          {needsReauth ? (
+            <div
+              role="status"
+              className="rounded-md border border-cantaloupe/40 bg-cantaloupe/10 px-3 py-3 text-sm text-cantaloupe-ink"
+            >
+              <p className="font-medium">Additional Shopify permissions are required</p>
+              <p className="mt-1 text-xs">
+                The store stays connected. Reconnect Shopify and approve the missing scopes so
+                Inboxly can sync commerce data in a later phase.
+              </p>
+              {permissions.missing.length > 0 ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-xs">
+                  {permissions.missing.map((scope) => (
+                    <li key={scope.handle}>
+                      <span className="font-medium">{scope.label}</span>
+                      <span className="text-muted"> ({scope.handle})</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {canReconnect ? (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    onClick={() => connectShopify({ reconnect: true })}
+                    disabled={connecting || disconnecting}
+                  >
+                    <Cable className="size-3.5" />
+                    {connecting ? 'Redirecting to Shopify…' : 'Reconnect Shopify'}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-muted">{permissions.detail}</p>
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-md border border-line bg-midnight px-3 py-3">
+              <p className="text-xs font-medium text-ink">Historical order access</p>
+              <p className="mt-1 text-xs text-muted">
+                {historicalOrders
+                  ? 'Granted — both read_orders and read_all_orders are present.'
+                  : 'Not granted — requires both read_orders and read_all_orders from Shopify.'}
+              </p>
+            </div>
+            <div className="rounded-md border border-line bg-midnight px-3 py-3">
+              <p className="text-xs font-medium text-ink">Protected customer data</p>
+              <p className="mt-1 text-xs text-muted">
+                Not claimed here. Shopify protected customer data is a separate Partner approval
+                and is not implied by these commerce scopes.
+              </p>
+            </div>
+          </div>
+
+          {permissions.granted.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-medium text-ink">Granted scopes</p>
+              <ul className="flex flex-wrap gap-2">
+                {permissions.granted.map((scope) => (
+                  <li key={scope.handle}>
+                    <Badge tone="neutral" title={scope.handle}>
+                      {scope.label}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-xs text-muted">No granted scopes are recorded for this connection yet.</p>
+          )}
+        </Card>
+      ) : null}
 
       {!embedOk ? (
         <div className="mb-4 flex flex-col gap-3 rounded-lg border border-line bg-elevated px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -326,6 +507,25 @@ export function StorefrontIntegrationPage() {
               activeStore
                 ? `${activeStore.name} · ${storeStatusLabel(activeStore.connection_status)}`
                 : 'No real store selected'
+            }
+          />
+          <StatusRow
+            label="Shopify permissions"
+            value={
+              !storeConnected
+                ? 'Not applicable'
+                : needsReauth
+                  ? 'Incomplete'
+                  : 'Granted'
+            }
+            ok={storeConnected && !needsReauth}
+            tone={!storeConnected ? 'neutral' : needsReauth ? 'warning' : 'success'}
+            detail={
+              !storeConnected
+                ? 'Connect Shopify to review commerce permissions'
+                : needsReauth
+                  ? `${permissions.missing.length} missing scope${permissions.missing.length === 1 ? '' : 's'}`
+                  : 'Based on scopes returned by Shopify'
             }
           />
           <StatusRow
