@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Image as ImageIcon, Link2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Image as ImageIcon, Trash2, Upload } from 'lucide-react'
 import {
   PageHeader,
   Button,
@@ -11,66 +12,217 @@ import {
   Input,
   Drawer,
   SearchInput,
+  LoadingState,
+  ErrorState,
 } from '../../components/ui'
-import { getImages } from '../../mock'
+import { ApiError } from '../../lib/api'
+import {
+  deleteAsset,
+  downloadAsset,
+  formatAssetMeta,
+  listStoreAssets,
+  uploadStoreAsset,
+  validateAssetFile,
+} from '../../lib/assetsApi'
 import { formatDateTime } from '../../lib/format'
+import { useActiveStore } from '../../store/useActiveStore'
+
+const PAGE_LIMIT = 25
 
 export function ImageLibraryPage() {
-  const [images, setImages] = useState(getImages())
+  const navigate = useNavigate()
+  const { activeStore, status: storeStatus } = useActiveStore()
+  const storeId = activeStore?.id
+
+  const [assets, setAssets] = useState([])
+  const [nextCursor, setNextCursor] = useState(null)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [listLoading, setListLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [refreshNonce, setRefreshNonce] = useState(0)
+
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [urlOpen, setUrlOpen] = useState(false)
-  const [urlValue, setUrlValue] = useState('')
+  const [file, setFile] = useState(null)
+  const [alt, setAlt] = useState('')
+  const [uploadError, setUploadError] = useState('')
+  const [uploading, setUploading] = useState(false)
+
   const [selectedId, setSelectedId] = useState(null)
-  const [showEmpty, setShowEmpty] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [actionError, setActionError] = useState('')
 
-  const selected = images.find((image) => image.id === selectedId) || null
+  const previewUrlRef = useRef('')
+  const listRequestId = useRef(0)
 
-  const rows = useMemo(() => {
-    if (showEmpty) return []
-    return images.filter((image) =>
-      `${image.name} ${image.alt}`.toLowerCase().includes(query.trim().toLowerCase()),
+  const selected = assets.find((asset) => asset.id === selectedId) || null
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  const reload = useCallback(() => {
+    setRefreshNonce((value) => value + 1)
+  }, [])
+
+  useEffect(() => {
+    if (storeStatus === 'loading' || !storeId) return undefined
+
+    const requestId = ++listRequestId.current
+    setListLoading(true)
+    setLoadError('')
+
+    listStoreAssets(storeId, { q: debouncedQuery || null, limit: PAGE_LIMIT })
+      .then((page) => {
+        if (listRequestId.current !== requestId) return
+        setAssets(page.data)
+        setNextCursor(page.nextCursor)
+      })
+      .catch((error) => {
+        if (listRequestId.current !== requestId) return
+        setAssets([])
+        setNextCursor(null)
+        setLoadError(error instanceof ApiError ? error.message : 'Unable to load assets.')
+      })
+      .finally(() => {
+        if (listRequestId.current === requestId) setListLoading(false)
+      })
+
+    return undefined
+  }, [storeId, storeStatus, debouncedQuery, refreshNonce])
+
+  useEffect(() => {
+    if (!selectedId) {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = ''
+      }
+      setPreviewUrl('')
+      setPreviewError('')
+      return undefined
+    }
+
+    let cancelled = false
+    setPreviewError('')
+    downloadAsset(selectedId)
+      .then(({ blob }) => {
+        if (cancelled) return
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+        const url = URL.createObjectURL(blob)
+        previewUrlRef.current = url
+        setPreviewUrl(url)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setPreviewUrl('')
+        setPreviewError(error instanceof ApiError ? error.message : 'Unable to preview.')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
+
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    },
+    [],
+  )
+
+  const loadMore = async () => {
+    if (!storeId || !nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const page = await listStoreAssets(storeId, {
+        q: debouncedQuery || null,
+        cursor: nextCursor,
+        limit: PAGE_LIMIT,
+      })
+      setAssets((current) => [...current, ...page.data])
+      setNextCursor(page.nextCursor)
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to load more assets.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const submitUpload = async () => {
+    if (!storeId || uploading) return
+    const validation = validateAssetFile(file)
+    if (validation) {
+      setUploadError(validation)
+      return
+    }
+    setUploading(true)
+    setUploadError('')
+    try {
+      const asset = await uploadStoreAsset(storeId, { file, alt })
+      setAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)])
+      setUploadOpen(false)
+      setFile(null)
+      setAlt('')
+      setSelectedId(asset.id)
+    } catch (error) {
+      setUploadError(error instanceof ApiError ? error.message : 'Unable to upload.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeSelected = async () => {
+    if (!selected || deleting) return
+    setDeleting(true)
+    setActionError('')
+    try {
+      await deleteAsset(selected.id)
+      setAssets((current) => current.filter((item) => item.id !== selected.id))
+      setSelectedId(null)
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : 'Unable to delete the asset.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (storeStatus === 'loading') {
+    return <LoadingState label="Loading store…" />
+  }
+
+  if (!storeId) {
+    return (
+      <EmptyState
+        title="Select a store"
+        description="Image assets are scoped to a store."
+        actionLabel="Go to Store settings"
+        onAction={() => navigate('/settings/store')}
+      />
     )
-  }, [images, query, showEmpty])
-
-  const addMockImage = (name) => {
-    setImages((current) => [
-      {
-        id: `img_${Date.now()}`,
-        name,
-        alt: name,
-        width: 1200,
-        height: 800,
-        sizeKb: 220,
-        uploadedAt: new Date().toISOString(),
-        color: '#2878FF',
-      },
-      ...current,
-    ])
-    setShowEmpty(false)
   }
 
   return (
     <div>
       <PageHeader
         title="Image library"
-        description="Upload interface is a visual prototype — files are not stored on a server."
+        description="Upload images for email templates. Files are stored privately per store."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => setShowEmpty((value) => !value)}>
-              {showEmpty ? 'Show assets' : 'Show empty'}
-            </Button>
-            <Button variant="secondary" onClick={() => setUrlOpen(true)}>
-              <Link2 className="size-4" />
-              Upload from URL
-            </Button>
-            <Button onClick={() => setUploadOpen(true)}>
-              <Upload className="size-4" />
-              Upload from computer
-            </Button>
-          </>
+          <Button onClick={() => setUploadOpen(true)}>
+            <Upload className="size-4" />
+            Upload image
+          </Button>
         }
       />
+
+      {actionError ? (
+        <p className="mb-3 text-sm text-danger" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       <div className="mb-3 max-w-md">
         <SearchInput
@@ -80,133 +232,137 @@ export function ImageLibraryPage() {
         />
       </div>
 
-      {rows.length === 0 ? (
+      {listLoading ? (
+        <LoadingState label="Loading images…" />
+      ) : loadError ? (
+        <ErrorState title="Unable to load images" description={loadError} onRetry={reload} />
+      ) : assets.length === 0 ? (
         <EmptyState
           icon={ImageIcon}
           title="Your image library is empty"
-          description="Drag and drop is simulated below. No real upload occurs in this prototype."
-          actionLabel="Upload from computer"
+          description="Upload a JPEG, PNG, GIF, or WebP (max 5 MB)."
+          actionLabel="Upload image"
           onAction={() => setUploadOpen(true)}
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {rows.map((image) => (
-            <button
-              key={image.id}
-              type="button"
-              onClick={() => setSelectedId(image.id)}
-              className="overflow-hidden rounded-lg border border-line bg-elevated text-left hover:border-electric"
-            >
-              <div
-                className="flex h-36 items-center justify-center text-sm font-semibold text-ink"
-                style={{ background: `${image.color}33` }}
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {assets.map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => setSelectedId(asset.id)}
+                className="overflow-hidden rounded-lg border border-line bg-elevated text-left hover:border-electric"
               >
-                {image.name.split('.')[0]}
-              </div>
-              <div className="space-y-1 p-3">
-                <p className="truncate text-sm font-medium text-ink">{image.name}</p>
-                <p className="text-xs text-muted">
-                  {image.width}×{image.height} · {image.sizeKb} KB
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
+                <div className="flex h-36 items-center justify-center bg-midnight text-sm font-semibold text-muted">
+                  {(asset.name || 'image').slice(0, 18)}
+                </div>
+                <div className="space-y-1 p-3">
+                  <p className="truncate text-sm font-medium text-ink">{asset.name}</p>
+                  <p className="text-xs text-muted">{formatAssetMeta(asset)}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+          {nextCursor ? (
+            <div className="mt-4">
+              <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </Button>
+            </div>
+          ) : null}
+        </>
       )}
 
       <Modal
         open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        title="Upload from computer"
+        onClose={() => {
+          if (uploading) return
+          setUploadOpen(false)
+          setUploadError('')
+        }}
+        title="Upload image"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setUploadOpen(false)}>
-              Cancel
-            </Button>
             <Button
+              variant="ghost"
+              disabled={uploading}
               onClick={() => {
-                addMockImage(`upload-${images.length + 1}.jpg`)
                 setUploadOpen(false)
+                setUploadError('')
               }}
             >
-              Add mock file
+              Cancel
+            </Button>
+            <Button disabled={uploading || !file} onClick={submitUpload}>
+              {uploading ? 'Uploading…' : 'Upload'}
             </Button>
           </>
         }
       >
-        <div className="rounded-md border border-dashed border-line bg-midnight px-4 py-10 text-center">
-          <Upload className="mx-auto mb-2 size-6 text-electric" />
-          <p className="text-sm text-ink">Drop files here</p>
-          <p className="mt-1 text-xs text-muted">Visual prototype only — nothing is uploaded.</p>
+        <div className="space-y-3">
+          <FormField label="File" error={uploadError}>
+            <Input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={(event) => {
+                setFile(event.target.files?.[0] || null)
+                setUploadError('')
+              }}
+            />
+          </FormField>
+          <FormField label="Alt text">
+            <Input
+              value={alt}
+              onChange={(event) => setAlt(event.target.value)}
+              placeholder="Describe the image"
+            />
+          </FormField>
+          <p className="text-xs text-muted">JPEG, PNG, GIF, or WebP · max 5 MB</p>
         </div>
       </Modal>
 
-      <Modal
-        open={urlOpen}
-        onClose={() => setUrlOpen(false)}
-        title="Upload from URL"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setUrlOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                addMockImage(urlValue.trim() || 'from-url.png')
-                setUrlValue('')
-                setUrlOpen(false)
-              }}
-            >
-              Add mock URL asset
-            </Button>
-          </>
-        }
-      >
-        <FormField label="Image URL">
-          <Input
-            value={urlValue}
-            onChange={(event) => setUrlValue(event.target.value)}
-            placeholder="https://cdn.example.com/banner.jpg"
-          />
-        </FormField>
-      </Modal>
-
-      <Drawer
-        open={Boolean(selected)}
-        onClose={() => setSelectedId(null)}
-        title="Asset preview"
-      >
+      <Drawer open={Boolean(selected)} onClose={() => setSelectedId(null)} title="Asset preview">
         {selected ? (
           <div className="space-y-3">
-            <div
-              className="flex h-48 items-center justify-center rounded-md border border-line text-sm font-semibold"
-              style={{ background: `${selected.color}33` }}
-            >
-              Preview
+            <div className="flex h-48 items-center justify-center overflow-hidden rounded-md border border-line bg-midnight">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt={selected.alt || selected.name}
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <p className="text-sm text-muted">{previewError || 'Loading preview…'}</p>
+              )}
             </div>
             <Card>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Name</dt>
-                  <dd>{selected.name}</dd>
+                  <dd className="truncate">{selected.name}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Alt</dt>
-                  <dd>{selected.alt}</dd>
+                  <dd className="truncate">{selected.alt || '—'}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Dimensions</dt>
-                  <dd>
-                    {selected.width}×{selected.height}
-                  </dd>
+                  <dt className="text-muted">Details</dt>
+                  <dd>{formatAssetMeta(selected)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Uploaded</dt>
-                  <dd>{formatDateTime(selected.uploadedAt)}</dd>
+                  <dd>{formatDateTime(selected.created_at)}</dd>
                 </div>
               </dl>
             </Card>
-            <Badge tone="accent">Prototype asset</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="info">{selected.mime_type}</Badge>
+              <Button variant="danger" disabled={deleting} onClick={removeSelected}>
+                <Trash2 className="size-4" />
+                {deleting ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
           </div>
         ) : null}
       </Drawer>

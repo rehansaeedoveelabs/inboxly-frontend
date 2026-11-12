@@ -23,6 +23,7 @@ import {
 import { listStoreSegments } from '../../lib/segmentsApi'
 import { formatDateTime, formatNumber, statusLabel, statusTone } from '../../lib/format'
 import { useActiveStore } from '../../store/useActiveStore'
+import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
 
 export function CampaignDetailPage() {
   const { campaignId } = useParams()
@@ -254,11 +255,15 @@ export function CampaignDetailPage() {
 
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink">Content</h3>
-          <div className="rounded-md border border-line bg-midnight p-4">
-            <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
-              {campaign.body || '—'}
-            </pre>
-          </div>
+          {campaign.content_format === 'html' && campaign.html_body ? (
+            <EmailHtmlPreview html={campaign.html_body} className="min-h-[360px]" />
+          ) : (
+            <div className="rounded-md border border-line bg-midnight p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
+                {campaign.body || '—'}
+              </pre>
+            </div>
+          )}
         </Card>
       </div>
 

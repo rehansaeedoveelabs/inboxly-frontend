@@ -21,6 +21,8 @@ import { AnalyticsPage } from './pages/insights/AnalyticsPage'
 import { LiveActivityPage } from './pages/insights/LiveActivityPage'
 import { ImageLibraryPage } from './pages/resources/ImageLibraryPage'
 import { BrandAssetsPage } from './pages/resources/BrandAssetsPage'
+import { EmailTemplatesPage } from './pages/resources/EmailTemplatesPage'
+import { EmailTemplateEditorPage } from './pages/resources/EmailTemplateEditorPage'
 import { StoreSettingsPage } from './pages/settings/StoreSettingsPage'
 import { StorefrontIntegrationPage } from './pages/settings/StorefrontIntegrationPage'
 import { ChannelSettingsPage } from './pages/settings/ChannelSettingsPage'
@@ -81,6 +83,8 @@ export function AppRoutes() {
         { path: 'insights/live', element: <LiveActivityPage /> },
 
         { path: 'resources/images', element: <ImageLibraryPage /> },
+        { path: 'resources/templates', element: <EmailTemplatesPage /> },
+        { path: 'resources/templates/:templateId', element: <EmailTemplateEditorPage /> },
         { path: 'resources/brand', element: <BrandAssetsPage /> },
 
         { path: 'settings/store', element: <StoreSettingsPage /> },
