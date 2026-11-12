@@ -57,6 +57,7 @@ export function ConfirmDialog({
   description,
   confirmLabel = 'Confirm',
   tone = 'primary',
+  children = null,
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -107,6 +108,7 @@ export function ConfirmDialog({
       }
     >
       <p className="text-sm text-muted">{description}</p>
+      {children}
       {error ? (
         <p className="mt-2 text-sm text-danger" role="alert">
           {error}
