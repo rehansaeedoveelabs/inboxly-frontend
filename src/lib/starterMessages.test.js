@@ -54,11 +54,11 @@ describe('starterMessages', () => {
     assert.equal(none.length, 0)
   })
 
-  it('maps email starter fields for form prefill', () => {
+  it('maps email starter content fields without overwriting campaign name', () => {
     const starter = STARTER_MESSAGES.find((item) => item.id === 'email-launch-new')
     assert.ok(starter)
     const fields = starterToFormFields(starter)
-    assert.equal(fields.name, starter.name)
+    assert.equal(fields.name, undefined)
     assert.equal(fields.subject, starter.subject)
     assert.equal(fields.previewText, starter.previewText)
     assert.equal(fields.body, starter.body)
@@ -71,7 +71,7 @@ describe('starterMessages', () => {
     assert.equal(starter.previewText, null)
 
     const fields = starterToFormFields(starter)
-    assert.equal(fields.name, starter.name)
+    assert.equal(fields.name, undefined)
     assert.equal(fields.subject, '')
     assert.equal(fields.previewText, '')
     assert.equal(fields.body, starter.body)

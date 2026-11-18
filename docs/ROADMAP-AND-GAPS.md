@@ -14,6 +14,8 @@ Status of UI modules relative to the live Laravel API. Do not treat mock screens
 | Segments + preview | `SegmentsPage`, `segmentsApi.js` | Segments + preview |
 | Imports (JSON rows) | `ImportsPage`, `importsApi.js`, `csvImport.js` | Contact imports |
 | Exports (create / poll / download) | `ExportsPage`, `exportsApi.js` | Contact exports |
+| Campaigns (list / wizard / detail / schedule / send / test-send) | `CampaignsPage`, `CampaignWizardPage`, `CampaignDetailPage`, `campaignsApi.js` | Laravel campaigns + Phase 9 send pipeline (default email driver is **fake**) |
+| Welcome Automation (list / create / edit / activate / pause / resume / archive / enrollment history) | `AutomationsPage`, `AutomationEditorPage`, `automationsApi.js` | `contact.email_subscribed` trigger + linear delay/send_email workflow; activate resumes paused; local sends use the **fake** email driver |
 
 ## Partially integrated modules
 
@@ -23,21 +25,32 @@ Status of UI modules relative to the live Laravel API. Do not treat mock screens
 | Imports | Live job + poll | No server-side history; sessionStorage only; no file upload API |
 | Header / shell | Live store switcher + auth menu | Notifications popover still prototype copy |
 | Multi-workspace | User payload may include many workspaces | UI uses `workspaces[0]` only |
+| Campaign Meta publish panel | Live eligible pages / publications APIs when Meta connected | Requires Meta OAuth; SMS campaign channel still not sendable |
 
 ## Mock UI modules
 
 These routes are reachable from the nav but read `src/mock/*` (or local-only state). They are **not** wired to Inboxly domain APIs:
 
 - Dashboard (`DashboardPage.jsx`)
-- Campaigns (list / wizard / detail)
-- Automation (list / templates / editor)
 - Forms (list / editor)
 - Insights (analytics / live)
-- Resources (image library / brand assets)
+- Resources (image library / brand assets) — email templates/assets pages may be live; treat brand/image library mocks per page
 - Channel settings
 - Account settings (explicitly “not saved to a backend”; theme switcher is local)
 
-`README.md` previously called the whole app a “frontend-only prototype”; that is **outdated** for Audience/Auth/Stores/Shopify, but still accurate for the modules above.
+`README.md` previously called the whole app a “frontend-only prototype”; that is **outdated** for Audience/Auth/Stores/Shopify/Campaigns/Welcome Automation, but still accurate for the modules above.
+
+## Deferred (Welcome Automation / marketing UI)
+
+Shipped thin slice: linear editor with optional `condition` branch, triggers `contact.email_subscribed` + `contact.tag_added`, fake email/SMS drivers locally, live dashboard insights overview.
+
+**Still deferred:**
+
+- Visual automation canvas / full graph editor
+- Rich multi-path branching UI
+- Additional triggers beyond email-subscribed and tag-added
+- SMS automations (campaign SMS fake send only)
+- Revenue analytics / live activity feed (insights analytics page still largely mock)
 
 ## Missing UI (backend may already exist)
 

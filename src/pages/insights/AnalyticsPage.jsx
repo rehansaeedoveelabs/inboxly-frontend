@@ -86,7 +86,7 @@ export function AnalyticsPage() {
     <div>
       <PageHeader
         title="Analytics"
-        description="Campaign, automation, audience and channel reports with mock figures."
+        description="Detailed revenue/open reports remain mock. Live audience and campaign counts are on the Dashboard."
         actions={
           <DateRangeSelector value={range} onChange={setRange} className="w-40" />
         }

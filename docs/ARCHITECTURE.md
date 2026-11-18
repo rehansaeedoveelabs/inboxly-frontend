@@ -30,7 +30,7 @@ Key paths:
 | Auth | `src/auth/*` |
 | Active store | `src/store/WorkspaceStoresProvider.jsx`, `useActiveStore.js` |
 | HTTP | `src/lib/api.js` |
-| Domain APIs | `src/lib/contactsApi.js`, `tagsApi.js`, `segmentsApi.js`, `importsApi.js`, `storesApi.js`, `shopifyOAuth.js` |
+| Domain APIs | `src/lib/contactsApi.js`, `tagsApi.js`, `segmentsApi.js`, `importsApi.js`, `exportsApi.js`, `storesApi.js`, `shopifyOAuth.js`, `campaignsApi.js`, `automationsApi.js` |
 | UI kit | `src/components/ui/*` |
 | Theme | `src/theme/*` |
 | Mocks | `src/mock/*` |
@@ -40,10 +40,10 @@ Key paths:
 `AppRoutes` uses `useRoutes` from react-router-dom 7:
 
 - **Guest:** `/login`, `/register`
-- **Protected children of `/`:** dashboard, campaigns*, automation*, forms*, audience/*, insights*, resources*, settings/*
+- **Protected children of `/`:** dashboard, campaigns, automation, forms*, audience/*, insights*, resources*, settings/*
 - Unknown paths → redirect `/`
 
-\* Many of these pages render mock data only — see [ROADMAP-AND-GAPS.md](ROADMAP-AND-GAPS.md).
+\* Several of these pages still render mock data. **Campaigns** and **Welcome Automation** are live against the Laravel API (local email uses the **fake** driver). Automation is a linear welcome editor for `contact.email_subscribed` only — no canvas, branching, extra triggers, SMS, or live analytics yet. See [ROADMAP-AND-GAPS.md](ROADMAP-AND-GAPS.md).
 
 ## Providers and authentication
 
@@ -92,12 +92,12 @@ src/pages/
   auth/           Login, Register
   audience/       Contacts, ContactDetail, Segments, Tags, Imports, Exports
   settings/       Store, Storefront, Channels(mock), Account(mock)
-  campaigns/      mock
-  automation/     mock
+  campaigns/      live (campaignsApi.js → Phase 9 send; fake email locally)
+  automation/     live (automationsApi.js; linear editor; email-subscribed + tag-added; condition branch; fake email locally)
   forms/          mock
-  insights/       mock
+  insights/       Analytics revenue reports still mock; Dashboard uses live insights overview
   resources/      mock
-  DashboardPage   mock metrics
+  DashboardPage   live store insights (insightsApi.js)
 ```
 
 ## Related docs

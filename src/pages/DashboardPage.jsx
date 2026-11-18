@@ -1,27 +1,20 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   PageHeader,
   MetricCard,
   ChartContainer,
-  DateRangeSelector,
   Card,
   Badge,
-  Tabs,
+  EmptyState,
 } from '../components/ui'
-import {
-  getAudienceSeries,
-  getDashboardMetrics,
-  getRecentAutomationActivity,
-  getRecentCampaignActivity,
-  getRevenueSeries,
-} from '../mock'
-import { formatCurrency, formatNumber, statusLabel, statusTone } from '../lib/format'
+import { useActiveStore } from '../store/useActiveStore'
+import { ApiError } from '../lib/api'
+import { getStoreInsightsOverview } from '../lib/insightsApi'
+import { formatNumber, statusLabel, statusTone } from '../lib/format'
 import { useTheme } from '../theme/useTheme'
 import { getChartThemeColors } from '../theme/theme'
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -32,98 +25,102 @@ import {
 } from 'recharts'
 
 export function DashboardPage() {
-  const [range, setRange] = useState('30d')
-  const [chartTab, setChartTab] = useState('revenue')
+  const { activeStore, status: storeStatus } = useActiveStore()
+  const storeId = activeStore?.id
   const { resolved } = useTheme()
   const chart = getChartThemeColors()
-  const metrics = getDashboardMetrics()
-  const revenueSeries = getRevenueSeries()
-  const audienceSeries = getAudienceSeries()
-  const campaigns = getRecentCampaignActivity()
-  const automations = getRecentAutomationActivity()
+
+  const [overview, setOverview] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    if (!storeId) {
+      setOverview(null)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      setOverview(await getStoreInsightsOverview(storeId))
+    } catch (err) {
+      setOverview(null)
+      setError(err instanceof ApiError ? err.message : 'Unable to load dashboard.')
+    } finally {
+      setLoading(false)
+    }
+  }, [storeId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (storeStatus === 'loading' || loading) {
+    return <p className="text-sm text-muted">Loading dashboard…</p>
+  }
+
+  if (!storeId) {
+    return (
+      <EmptyState
+        title="Select a store"
+        description="Dashboard metrics are scoped to the active store."
+      />
+    )
+  }
+
+  if (error) {
+    return (
+      <EmptyState
+        title="Unable to load dashboard"
+        description={error}
+        actionLabel="Retry"
+        onAction={load}
+      />
+    )
+  }
+
+  const campaigns = overview?.campaigns || {}
+  const automations = overview?.automations || {}
+  const series = overview?.audience_series || []
+  const recentCampaigns = overview?.recent_campaigns || []
+  const recentAutomations = overview?.recent_automations || []
 
   return (
     <div>
       <PageHeader
         title="Dashboard"
-        description="Performance overview with prototype metrics. Nothing is connected to a live store."
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge tone="accent">Mock data</Badge>
-            <DateRangeSelector value={range} onChange={setRange} className="w-40" />
-          </div>
-        }
+        description={`Live store metrics for ${activeStore.name}. Revenue analytics are not available yet.`}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Contacts" value={formatNumber(overview?.contacts_total ?? 0)} hint="Store audience" />
         <MetricCard
-          label="Marketing revenue"
-          value={formatCurrency(metrics.marketingRevenue)}
-          trend="+12.4%"
-          hint="Campaigns + automation"
+          label="Email subscribers"
+          value={formatNumber(overview?.email_subscribers ?? 0)}
+          hint="Subscribed email consent"
         />
         <MetricCard
-          label="Campaign revenue"
-          value={formatCurrency(metrics.campaignRevenue)}
-          trend="+4.1%"
-          hint="Email & SMS sends"
+          label="SMS subscribers"
+          value={formatNumber(overview?.sms_subscribers ?? 0)}
+          hint="Subscribed SMS consent"
         />
         <MetricCard
-          label="Automation revenue"
-          value={formatCurrency(metrics.automationRevenue)}
-          trend="+18.2%"
-          hint="Active workflows"
-        />
-        <MetricCard
-          label="Audience growth"
-          value={`+${formatNumber(metrics.audienceGrowth)}`}
-          trend="+8.6%"
-          hint="Net new subscribers"
+          label="Automation enrollments"
+          value={formatNumber(automations.enrollments_total ?? 0)}
+          hint="All-time enrollments"
         />
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Email subscribers" value={formatNumber(metrics.emailSubscribers)} hint="Subscribed contacts" />
-        <MetricCard label="SMS subscribers" value={formatNumber(metrics.smsSubscribers)} hint="Opted-in SMS" />
-        <MetricCard label="Push subscribers" value={formatNumber(metrics.pushSubscribers)} hint="Web push enabled" />
+        <MetricCard label="Campaigns sent" value={formatNumber(campaigns.sent ?? 0)} hint="Sent + partially sent" />
+        <MetricCard label="Campaigns draft" value={formatNumber(campaigns.draft ?? 0)} />
+        <MetricCard label="Automations active" value={formatNumber(automations.active ?? 0)} />
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-5">
-        <ChartContainer
-          className="xl:col-span-3"
-          title="Revenue performance"
-          actions={
-            <Tabs
-              value={chartTab}
-              onChange={setChartTab}
-              items={[
-                { value: 'revenue', label: 'Revenue' },
-                { value: 'orders', label: 'Orders' },
-              ]}
-            />
-          }
-        >
-          <ResponsiveContainer width="100%" height="100%" key={`bar-${resolved}`}>
-            <BarChart data={revenueSeries}>
-              <CartesianGrid stroke={chart.grid} vertical={false} />
-              <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{
-                  background: chart.tooltipBg,
-                  border: `1px solid ${chart.tooltipBorder}`,
-                  borderRadius: 8,
-                  color: chart.tooltipText,
-                }}
-              />
-              <Bar dataKey={chartTab} fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={36} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-
-        <ChartContainer className="xl:col-span-2" title="Audience growth">
+      <div className="mt-4">
+        <ChartContainer title="Audience activity (last 4 weeks)">
           <ResponsiveContainer width="100%" height="100%" key={`line-${resolved}`}>
-            <LineChart data={audienceSeries}>
+            <LineChart data={series}>
               <CartesianGrid stroke={chart.grid} vertical={false} />
               <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
@@ -135,8 +132,9 @@ export function DashboardPage() {
                   color: chart.tooltipText,
                 }}
               />
-              <Line type="monotone" dataKey="email" stroke={chart.electric} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sms" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="contacts" stroke={chart.electric} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="email" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="sms" stroke={chart.axis} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
@@ -150,19 +148,23 @@ export function DashboardPage() {
               View all
             </Link>
           </div>
-          <ul className="space-y-2 text-sm">
-            {campaigns.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
-              >
-                <Link to={`/campaigns/${item.id}`} className="truncate text-ink hover:text-electric">
-                  {item.name}
-                </Link>
-                <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
-              </li>
-            ))}
-          </ul>
+          {recentCampaigns.length === 0 ? (
+            <p className="text-sm text-muted">No campaigns yet.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {recentCampaigns.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
+                >
+                  <Link to={`/campaigns/${item.id}`} className="truncate text-ink hover:text-electric">
+                    {item.name}
+                  </Link>
+                  <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card>
@@ -172,19 +174,23 @@ export function DashboardPage() {
               View all
             </Link>
           </div>
-          <ul className="space-y-2 text-sm">
-            {automations.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
-              >
-                <Link to={`/automation/${item.id}`} className="truncate text-ink hover:text-electric">
-                  {item.name}
-                </Link>
-                <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
-              </li>
-            ))}
-          </ul>
+          {recentAutomations.length === 0 ? (
+            <p className="text-sm text-muted">No automations yet.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {recentAutomations.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-line bg-midnight px-3 py-2"
+                >
+                  <Link to={`/automation/${item.id}`} className="truncate text-ink hover:text-electric">
+                    {item.name}
+                  </Link>
+                  <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
     </div>

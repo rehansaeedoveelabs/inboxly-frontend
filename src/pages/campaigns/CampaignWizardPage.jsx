@@ -253,6 +253,13 @@ export function CampaignWizardPage() {
     } else {
       payload.subject = form.subject
       payload.preview_text = form.previewText
+      // Keep HTML/plain in sync with the server. Plain saves must clear a prior
+      // template html_body so send does not keep stale HTML beside edited text.
+      if (form.contentFormat === 'html' && form.contentDocument) {
+        payload.content_document = form.contentDocument
+      } else {
+        payload.content_document = null
+      }
     }
     return payload
   }
@@ -464,7 +471,7 @@ export function CampaignWizardPage() {
               ? 'Create SMS campaign'
               : 'Create email campaign'
         }
-        description="Compose a draft and schedule it for later. Delivery is not connected yet."
+        description="Compose a draft, schedule it, or send later. Locally, email and SMS use fake messaging drivers (not real Brevo or carrier delivery)."
         actions={<Badge tone="info">{isSms ? 'SMS' : 'Email'}</Badge>}
       />
 
