@@ -33,6 +33,14 @@ export function publicationStatusTone(status) {
 }
 
 /**
+ * Queued/publishing rows should keep the history list polling until terminal.
+ * @param {{ status?: string } | null | undefined} row
+ */
+export function isPublicationInFlight(row) {
+  return row?.status === 'queued' || row?.status === 'publishing'
+}
+
+/**
  * Whether the UI should offer retry for this publication row.
  * @param {{ status?: string }} row
  */

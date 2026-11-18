@@ -6,6 +6,7 @@ import {
   Card,
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   LoadingState,
 } from '../../components/ui'
@@ -47,6 +48,9 @@ export function MetaIntegrationPage() {
   const [discovered, setDiscovered] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
   const [discovering, setDiscovering] = useState(false)
+  const [discoverAttempted, setDiscoverAttempted] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [pageToRemove, setPageToRemove] = useState(null)
 
   const oauthFlash = useMemo(() => {
     const meta = searchParams.get('meta')
@@ -113,20 +117,18 @@ export function MetaIntegrationPage() {
 
   const onDisconnect = async () => {
     if (!activeStore?.id) return
-    if (!window.confirm('Disconnect Meta from this store? Selected Page tokens will be removed.')) {
-      return
-    }
-    setBusy(true)
     setError('')
     try {
       await disconnectMetaConnection(activeStore.id)
       setFlash({ tone: 'success', message: 'Meta disconnected for this store.' })
       setDiscovered([])
+      setDiscoverAttempted(false)
+      setSelectedIds([])
       await loadConnection()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Unable to disconnect Meta.')
-    } finally {
-      setBusy(false)
+      const message = err instanceof ApiError ? err.message : 'Unable to disconnect Meta.'
+      setError(message)
+      throw err instanceof Error ? err : new Error(message)
     }
   }
 
@@ -134,6 +136,7 @@ export function MetaIntegrationPage() {
     if (!activeStore?.id) return
     setDiscovering(true)
     setError('')
+    setDiscoverAttempted(true)
     try {
       const list = await discoverMetaPages(activeStore.id)
       setDiscovered(list)
@@ -190,16 +193,14 @@ export function MetaIntegrationPage() {
 
   const onRemovePage = async (pageRowId) => {
     if (!activeStore?.id) return
-    if (!window.confirm('Remove this Facebook Page from the store?')) return
-    setBusy(true)
     setError('')
     try {
       await removeMetaPage(activeStore.id, pageRowId)
       await loadConnection()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Unable to remove Page.')
-    } finally {
-      setBusy(false)
+      const message = err instanceof ApiError ? err.message : 'Unable to remove Page.'
+      setError(message)
+      throw err instanceof Error ? err : new Error(message)
     }
   }
 
@@ -224,7 +225,7 @@ export function MetaIntegrationPage() {
     <div>
       <PageHeader
         title="Meta integration"
-        description={`Connect Facebook Pages for ${activeStore.name}. Publishing campaigns to Pages arrives in a later phase.`}
+        description={`Connect Facebook Pages for ${activeStore.name}. Discover Pages after connecting, then select which ones Inboxly can use.`}
         actions={
           <>
             <Badge tone={statusTone(connection?.status)}>
@@ -236,7 +237,7 @@ export function MetaIntegrationPage() {
               </Button>
             ) : null}
             {connected ? (
-              <Button variant="danger" disabled={busy} onClick={onDisconnect}>
+              <Button variant="danger" disabled={busy} onClick={() => setConfirmDisconnect(true)}>
                 Disconnect
               </Button>
             ) : null}
@@ -359,7 +360,11 @@ export function MetaIntegrationPage() {
                         Make default
                       </Button>
                     ) : null}
-                    <Button variant="danger" disabled={busy} onClick={() => onRemovePage(page.id)}>
+                    <Button
+                      variant="danger"
+                      disabled={busy}
+                      onClick={() => setPageToRemove(page.id)}
+                    >
                       Remove
                     </Button>
                   </div>
@@ -382,6 +387,17 @@ export function MetaIntegrationPage() {
           ) : null}
         </Card>
       </div>
+
+      {discoverAttempted && !discovering && discovered.length === 0 ? (
+        <Card className="mt-4">
+          <h2 className="text-sm font-semibold text-ink">No Pages found</h2>
+          <p className="mt-1 text-sm text-muted">
+            Meta did not return any Pages for this connection. Confirm this Facebook user admins
+            the Page, then Disconnect and Connect again and explicitly select the Page in the
+            Facebook dialog.
+          </p>
+        </Card>
+      ) : null}
 
       {discovered.length > 0 ? (
         <Card className="mt-4">
@@ -425,6 +441,29 @@ export function MetaIntegrationPage() {
           </ul>
         </Card>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onClose={() => setConfirmDisconnect(false)}
+        title="Disconnect Meta?"
+        description="Disconnect Meta from this store? Selected Page tokens will be removed."
+        confirmLabel="Disconnect"
+        tone="danger"
+        onConfirm={onDisconnect}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pageToRemove)}
+        onClose={() => setPageToRemove(null)}
+        title="Remove Facebook Page?"
+        description="Remove this Facebook Page from the store? Its Page token will be deleted."
+        confirmLabel="Remove"
+        tone="danger"
+        onConfirm={async () => {
+          if (!pageToRemove) return
+          await onRemovePage(pageToRemove)
+        }}
+      />
     </div>
   )
 }

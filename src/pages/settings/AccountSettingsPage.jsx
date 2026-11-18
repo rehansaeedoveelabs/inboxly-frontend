@@ -6,6 +6,7 @@ import {
   Button,
   FormField,
   Input,
+  Modal,
   Table,
   ThemeSwitcher,
 } from '../../components/ui'
@@ -16,6 +17,7 @@ export function AccountSettingsPage() {
   const initial = getAccountSettings()
   const [account, setAccount] = useState(initial)
   const [notice, setNotice] = useState('')
+  const [inviteNoticeOpen, setInviteNoticeOpen] = useState(false)
   const { preference, resolved } = useTheme()
 
   const save = () => {
@@ -124,15 +126,26 @@ export function AccountSettingsPage() {
             <Button
               className="mt-3"
               variant="secondary"
-              onClick={() =>
-                alert('Prototype only — invite flow is not connected to email delivery.')
-              }
+              onClick={() => setInviteNoticeOpen(true)}
             >
               Invite member
             </Button>
           </div>
         </Card>
       </div>
+
+      <Modal
+        open={inviteNoticeOpen}
+        onClose={() => setInviteNoticeOpen(false)}
+        title="Invite member"
+        footer={
+          <Button onClick={() => setInviteNoticeOpen(false)}>OK</Button>
+        }
+      >
+        <p className="text-sm text-muted">
+          Prototype only — invite flow is not connected to email delivery.
+        </p>
+      </Modal>
     </div>
   )
 }

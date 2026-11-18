@@ -6,11 +6,11 @@ import {
   Card,
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   LoadingState,
 } from '../../components/ui'
 import { ApiError } from '../../lib/api'
-import { formatDateTime } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { startShopifyOAuth } from '../../lib/shopifyOAuth'
 import {
@@ -72,6 +72,7 @@ export function StorefrontIntegrationPage() {
   const [checking, setChecking] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
   const [connectError, setConnectError] = useState('')
   const [disconnectFlash, setDisconnectFlash] = useState(null)
   const [oauthFlash, setOauthFlash] = useState(null)
@@ -212,18 +213,6 @@ export function StorefrontIntegrationPage() {
 
   const disconnectShopify = async () => {
     if (!storeConnected || !activeStore?.id || disconnecting) return
-    const shopLabel = activeStore.shopify_shop_domain || activeStore.domain || activeStore.name
-    const confirmed = window.confirm(
-      [
-        `Disconnect Shopify for ${activeStore.name}?`,
-        '',
-        'This uninstalls Inboxly from the Shopify store and clears the local Inboxly connection.',
-        'Inboxly Audience data (contacts, tags, segments) will be preserved.',
-        '',
-        `Shop: ${shopLabel}`,
-      ].join('\n'),
-    )
-    if (!confirmed) return
 
     setConnectError('')
     setOauthFlash(null)
@@ -253,10 +242,15 @@ export function StorefrontIntegrationPage() {
           : 'Network error while disconnecting Shopify.'
       setConnectError(message)
       setDisconnectFlash(null)
+      throw error instanceof Error ? error : new Error(message)
     } finally {
       setDisconnecting(false)
     }
   }
+
+  const shopLabel = activeStore
+    ? activeStore.shopify_shop_domain || activeStore.domain || activeStore.name
+    : ''
 
   return (
     <div>
@@ -338,7 +332,7 @@ export function StorefrontIntegrationPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={disconnectShopify}
+                  onClick={() => setConfirmDisconnect(true)}
                   disabled={disconnecting || connecting}
                 >
                   {disconnecting ? 'Disconnecting…' : 'Disconnect'}
@@ -457,123 +451,130 @@ export function StorefrontIntegrationPage() {
         </Card>
       ) : null}
 
-      {!embedOk ? (
-        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-line bg-elevated px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-cantaloupe-ink" aria-hidden />
-            <div>
-              <p className="text-sm font-semibold text-ink">App embed prototype</p>
-              <p className="text-xs text-muted">
-                Theme embed simulation only — it does not mean Shopify is connected. Use Connect
-                Shopify above for the real OAuth flow.
-              </p>
+      <Card className="mb-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Connection health</h3>
+            <p className="mt-1 text-xs text-muted">Updated from the current store session</p>
+          </div>
+        </div>
+
+        <StatusRow
+          label="Store connection"
+          value={storeConnected ? 'Connected' : 'Not connected'}
+          ok={storeConnected}
+          detail={
+            activeStore
+              ? `${activeStore.name} · ${storeStatusLabel(activeStore.connection_status)}`
+              : 'No real store selected'
+          }
+        />
+        <StatusRow
+          label="Shopify permissions"
+          value={
+            !storeConnected ? 'Not applicable' : needsReauth ? 'Incomplete' : 'Granted'
+          }
+          ok={storeConnected && !needsReauth}
+          tone={!storeConnected ? 'neutral' : needsReauth ? 'warning' : 'success'}
+          detail={
+            !storeConnected
+              ? 'Connect Shopify to review commerce permissions'
+              : needsReauth
+                ? `${permissions.missing.length} missing scope${permissions.missing.length === 1 ? '' : 's'}`
+                : 'Based on scopes returned by Shopify'
+          }
+        />
+      </Card>
+
+      <Card className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Local prototype</h3>
+            <p className="mt-1 text-xs text-muted">
+              App embed, tracking, and forms here are local UI only. They do not reflect Shopify
+              theme or app extension state.
+            </p>
+          </div>
+          <Badge tone="accent">Prototype</Badge>
+        </div>
+
+        {!embedOk ? (
+          <div className="flex flex-col gap-3 rounded-md border border-line bg-midnight px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-cantaloupe-ink" aria-hidden />
+              <div>
+                <p className="text-sm font-medium text-ink">App embed not marked locally</p>
+                <p className="text-xs text-muted">
+                  Simulation only — use Connect Shopify above for the real OAuth flow.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  window.open(integration.themeEditorUrl, '_blank', 'noopener,noreferrer')
+                  simulateEnable()
+                }}
+              >
+                Open theme editor
+                <ExternalLink className="size-3.5" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={simulateEnable}>
+                Mark embed done (local)
+              </Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                window.open(integration.themeEditorUrl, '_blank', 'noopener,noreferrer')
-                simulateEnable()
-              }}
-            >
-              Open theme editor
-              <ExternalLink className="size-3.5" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={simulateEnable}>
-              Mark embed done (local)
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-4 rounded-lg border border-line bg-elevated px-4 py-3 text-sm text-ink">
-          App embed marked enabled locally. This prototype state is separate from Shopify OAuth.
-        </div>
-      )}
-
-      <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-ink">Connection health</h3>
-            <p className="text-xs text-muted">Checked {formatDateTime(integration.lastCheckedAt)}</p>
-          </div>
-
-          <StatusRow
-            label="Store connection"
-            value={storeConnected ? 'Connected' : 'Not connected'}
-            ok={storeConnected}
-            detail={
-              activeStore
-                ? `${activeStore.name} · ${storeStatusLabel(activeStore.connection_status)}`
-                : 'No real store selected'
-            }
-          />
-          <StatusRow
-            label="Shopify permissions"
-            value={
-              !storeConnected
-                ? 'Not applicable'
-                : needsReauth
-                  ? 'Incomplete'
-                  : 'Granted'
-            }
-            ok={storeConnected && !needsReauth}
-            tone={!storeConnected ? 'neutral' : needsReauth ? 'warning' : 'success'}
-            detail={
-              !storeConnected
-                ? 'Connect Shopify to review commerce permissions'
-                : needsReauth
-                  ? `${permissions.missing.length} missing scope${permissions.missing.length === 1 ? '' : 's'}`
-                  : 'Based on scopes returned by Shopify'
-            }
-          />
-          <StatusRow
-            label="App embed"
-            value={embedOk ? 'Enabled (local)' : 'Disabled (local)'}
-            ok={embedOk}
-            detail="Prototype toggle only"
-          />
-          <StatusRow
-            label="Storefront tracking"
-            value={trackingOk ? 'Active (local)' : 'Inactive (local)'}
-            ok={trackingOk}
-            detail="Prototype status"
-          />
-          <StatusRow
-            label="Signup forms"
-            value={formsOk ? 'Active (local)' : 'Blocked (local)'}
-            ok={formsOk}
-            detail="Prototype status"
-          />
-          <StatusRow
-            label="Popup forms"
-            value={popupOk ? 'Active (local)' : 'Blocked (local)'}
-            ok={popupOk}
-            detail="Prototype status"
-          />
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button variant="secondary" disabled={checking} onClick={simulateEnable}>
-              {checking ? 'Checking…' : 'Simulate embed enabled'}
-            </Button>
-            <Button variant="ghost" onClick={simulateDisable}>
-              Reset local prototype
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Local embed prototype</h3>
-          <p className="mb-3 text-xs text-muted">
-            Dawn theme references here are local UI only and do not imply a Shopify connection.
+        ) : (
+          <p className="rounded-md border border-line bg-midnight px-3 py-2 text-sm text-ink">
+            App embed marked enabled locally. Separate from Shopify OAuth.
           </p>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-2">
+            <StatusRow
+              label="App embed"
+              value={embedOk ? 'Enabled (local)' : 'Disabled (local)'}
+              ok={embedOk}
+              detail="Prototype toggle only"
+            />
+            <StatusRow
+              label="Storefront tracking"
+              value={trackingOk ? 'Active (local)' : 'Inactive (local)'}
+              ok={trackingOk}
+              detail="Prototype status"
+            />
+            <StatusRow
+              label="Signup forms"
+              value={formsOk ? 'Active (local)' : 'Blocked (local)'}
+              ok={formsOk}
+              detail="Prototype status"
+            />
+            <StatusRow
+              label="Popup forms"
+              value={popupOk ? 'Active (local)' : 'Blocked (local)'}
+              ok={popupOk}
+              detail="Prototype status"
+            />
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="secondary" disabled={checking} onClick={simulateEnable}>
+                {checking ? 'Checking…' : 'Simulate embed enabled'}
+              </Button>
+              <Button variant="ghost" onClick={simulateDisable}>
+                Reset local prototype
+              </Button>
+            </div>
+          </div>
+
           <div
             className={cn(
               'rounded-lg border p-4',
               embedOk ? 'border-success/40 bg-success/10' : 'border-line bg-midnight',
             )}
           >
+            <p className="mb-1 text-xs text-muted">Dawn theme references are local UI only</p>
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-medium text-ink">Inboxly App embed</p>
               <Badge tone={embedOk ? 'success' : 'warning'}>{embedOk ? 'On' : 'Off'}</Badge>
@@ -597,8 +598,20 @@ export function StorefrontIntegrationPage() {
               />
             </button>
           </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onClose={() => setConfirmDisconnect(false)}
+        title={`Disconnect Shopify for ${activeStore?.name || 'this store'}?`}
+        description="This uninstalls Inboxly from the Shopify store and clears the local Inboxly connection. Inboxly Audience data (contacts, tags, segments) will be preserved."
+        confirmLabel="Disconnect"
+        tone="danger"
+        onConfirm={disconnectShopify}
+      >
+        {shopLabel ? <p className="mt-2 text-sm text-muted">Shop: {shopLabel}</p> : null}
+      </ConfirmDialog>
     </div>
   )
 }

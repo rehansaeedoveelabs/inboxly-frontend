@@ -8,6 +8,7 @@ import {
   Badge,
   FormField,
   Input,
+  Modal,
   Textarea,
   Select,
   Tabs,
@@ -60,6 +61,7 @@ export function FormEditorPage() {
   const [form, setForm] = useState(() => existing || createBlank(searchParams.get('type')))
   const [device, setDevice] = useState('desktop')
   const [panel, setPanel] = useState('content')
+  const [saveNoticeOpen, setSaveNoticeOpen] = useState(false)
 
   if (formId && formId !== 'new' && !existing) {
     return (
@@ -139,7 +141,7 @@ export function FormEditorPage() {
             >
               {form.status === 'enabled' ? 'Disable' : 'Enable form'}
             </Button>
-            <Button onClick={() => alert('Prototype only — form not persisted.')}>Save</Button>
+            <Button onClick={() => setSaveNoticeOpen(true)}>Save</Button>
           </>
         }
       />
@@ -330,6 +332,15 @@ export function FormEditorPage() {
           )}
         </Card>
       </div>
+
+      <Modal
+        open={saveNoticeOpen}
+        onClose={() => setSaveNoticeOpen(false)}
+        title="Save form"
+        footer={<Button onClick={() => setSaveNoticeOpen(false)}>OK</Button>}
+      >
+        <p className="text-sm text-muted">Prototype only — form not persisted.</p>
+      </Modal>
     </div>
   )
 }

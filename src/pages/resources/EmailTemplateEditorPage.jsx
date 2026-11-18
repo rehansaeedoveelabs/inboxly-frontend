@@ -5,6 +5,7 @@ import {
   PageHeader,
   Button,
   Card,
+  ConfirmDialog,
   FormField,
   Input,
   Select,
@@ -50,6 +51,7 @@ export function EmailTemplateEditorPage() {
 
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [actionError, setActionError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -139,16 +141,15 @@ export function EmailTemplateEditorPage() {
 
   const remove = async () => {
     if (!templateId || deleting) return
-    if (!window.confirm('Delete this template? Campaigns that already applied it keep their snapshot.')) {
-      return
-    }
     setDeleting(true)
     setActionError('')
     try {
       await deleteEmailTemplate(templateId)
       navigate('/resources/templates')
     } catch (error) {
-      setActionError(error instanceof ApiError ? error.message : 'Unable to delete.')
+      const message = error instanceof ApiError ? error.message : 'Unable to delete.'
+      setActionError(message)
+      throw error instanceof Error ? error : new Error(message)
     } finally {
       setDeleting(false)
     }
@@ -215,7 +216,7 @@ export function EmailTemplateEditorPage() {
             <Button variant="secondary" disabled={previewLoading} onClick={runPreview}>
               {previewLoading ? 'Previewing…' : 'Refresh preview'}
             </Button>
-            <Button variant="danger" disabled={deleting} onClick={remove}>
+            <Button variant="danger" disabled={deleting} onClick={() => setConfirmDelete(true)}>
               {deleting ? 'Deleting…' : 'Delete'}
             </Button>
             <Button disabled={saving} onClick={save}>
@@ -276,6 +277,16 @@ export function EmailTemplateEditorPage() {
           <EmailHtmlPreview html={previewHtml} className="min-h-[640px]" />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this template?"
+        description="Campaigns that already applied it keep their snapshot."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={remove}
+      />
     </div>
   )
 }
