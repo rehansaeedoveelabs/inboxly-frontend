@@ -166,8 +166,8 @@ export function CampaignsPage() {
         title="Campaigns"
         description={
           activeStore
-            ? `Compose and schedule email or SMS campaigns for ${activeStore.name}. Delivery is not connected yet.`
-            : 'Compose and schedule email or SMS campaigns. Delivery is not connected yet.'
+            ? `Compose, schedule, and send campaigns for ${activeStore.name}. Local email/SMS use fake messaging drivers by default (not real Brevo/carrier delivery).`
+            : 'Compose, schedule, and send campaigns. Local email/SMS use fake messaging drivers by default (not real Brevo/carrier delivery).'
         }
         actions={
           <Button onClick={() => setCreateOpen(true)} disabled={!storeId}>

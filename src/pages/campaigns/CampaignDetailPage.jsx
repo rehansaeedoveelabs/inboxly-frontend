@@ -139,7 +139,9 @@ export function CampaignDetailPage() {
     try {
       const result = await testSendCampaign(campaign.id)
       if (result.accepted) {
-        setTestNotice(`Test email accepted for ${result.to}.`)
+        setTestNotice(
+          `Test email accepted for ${result.to}. Locally this uses the fake mail driver and is not delivered via Brevo.`,
+        )
       } else {
         setActionError(result.error_message || 'Test send was rejected.')
       }
@@ -263,8 +265,8 @@ export function CampaignDetailPage() {
 
       {!isEmail ? (
         <p className="mb-3 rounded-md border border-line bg-midnight px-3 py-2 text-sm text-muted" role="status">
-          SMS sending is not available yet. You can still draft and schedule SMS campaigns; delivery
-          will be enabled when an SMS provider is connected.
+          SMS uses the configured messaging driver. Locally set MESSAGING_SMS_DRIVER=fake for fake
+          delivery (no real carrier). Keep disabled until a real SMS provider is wired.
         </p>
       ) : null}
 
@@ -358,7 +360,7 @@ export function CampaignDetailPage() {
         open={confirmSend}
         onClose={() => setConfirmSend(false)}
         title="Send campaign now?"
-        description="This queues delivery to the eligible audience. Requires messaging to be enabled on the server (Brevo for email)."
+        description="This queues email delivery to the eligible audience. Locally, messages use the fake mail driver and are not sent through Brevo or any live provider."
         confirmLabel="Send now"
         onConfirm={onSendNow}
       />

@@ -190,15 +190,16 @@ export function filterStarterMessages({ channel, category = null, query = null }
 }
 
 /**
- * Map a starter into wizard form fields. SMS never sets email-only fields.
+ * Map a starter into wizard content fields. Does not change campaign name —
+ * merchants keep the name they already entered.
+ * SMS never sets email-only fields.
  *
  * @param {StarterMessage} starter
- * @returns {{ name: string, subject: string, previewText: string, body: string }}
+ * @returns {{ subject: string, previewText: string, body: string }}
  */
 export function starterToFormFields(starter) {
   if (starter.channel === 'sms') {
     return {
-      name: starter.name,
       subject: '',
       previewText: '',
       body: starter.body,
@@ -206,7 +207,6 @@ export function starterToFormFields(starter) {
   }
 
   return {
-    name: starter.name,
     subject: starter.subject || '',
     previewText: starter.previewText || '',
     body: starter.body,

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
   PageHeader,
@@ -8,131 +8,206 @@ import {
   Badge,
   FormField,
   Input,
-  Select,
   Textarea,
   EmptyState,
+  Table,
 } from '../../components/ui'
+import { useActiveStore } from '../../store/useActiveStore'
+import { ApiError } from '../../lib/api'
 import {
-  getAutomationById,
-  getAutomationTemplateById,
-} from '../../mock'
-import { statusLabel, statusTone } from '../../lib/format'
-import { cn } from '../../lib/cn'
+  activateAutomation,
+  archiveAutomation,
+  createStoreAutomation,
+  defaultWelcomeSteps,
+  getAutomation,
+  listAutomationEnrollments,
+  pauseAutomation,
+  updateAutomation,
+} from '../../lib/automationsApi'
+import { formatDateTime, statusLabel, statusTone } from '../../lib/format'
 
-const nodeStyles = {
-  trigger: 'border-electric bg-electric/10',
-  delay: 'border-warning bg-warning/10',
-  condition: 'border-cantaloupe bg-cantaloupe/10',
-  action: 'border-success bg-success/10',
-}
-
-function blankWorkflow(template) {
-  if (template) {
-    return {
-      id: 'auto_new',
-      name: template.name,
-      status: 'draft',
-      trigger: template.name,
-      channels: template.channels,
-      enrolled: 0,
-      revenue: 0,
-      nodes: [
-        { id: 'n1', type: 'trigger', label: `${template.name} trigger`, x: 120, y: 40, config: {} },
-        { id: 'n2', type: 'delay', label: 'Wait 1 hour', x: 120, y: 150, config: { waitMinutes: 60 } },
-        {
-          id: 'n3',
-          type: 'action',
-          label: 'Send email',
-          x: 120,
-          y: 260,
-          config: { channel: 'email', subject: 'Follow up' },
-        },
-      ],
-      edges: [
-        { from: 'n1', to: 'n2' },
-        { from: 'n2', to: 'n3' },
-      ],
-    }
-  }
-
+function stepsToForm(steps = []) {
+  const delay = steps.find((step) => step.type === 'delay')
+  const email = steps.find((step) => step.type === 'send_email')
+  const condition = steps.find(
+    (step) => step.type === 'condition' && step.config?.predicate === 'email_subscribed',
+  )
   return {
-    id: 'auto_new',
-    name: 'Custom workflow',
-    status: 'draft',
-    trigger: 'Manual / custom',
-    channels: ['email'],
-    enrolled: 0,
-    revenue: 0,
-    nodes: [
-      { id: 'n1', type: 'trigger', label: 'Custom trigger', x: 120, y: 40, config: {} },
-    ],
-    edges: [],
+    delayMinutes: Number(delay?.config?.delay_minutes ?? 0) || 0,
+    subject: email?.config?.subject || 'Welcome',
+    body: email?.config?.body || 'Thanks for subscribing. We’re glad you’re here.',
+    requireEmailSubscribed: Boolean(condition),
   }
 }
 
 export function AutomationEditorPage() {
   const { automationId } = useParams()
-  const [searchParams] = useSearchParams()
+  const isNew = !automationId || automationId === 'new'
   const navigate = useNavigate()
-  const existing = automationId && automationId !== 'new' ? getAutomationById(automationId) : null
-  const template = getAutomationTemplateById(searchParams.get('template'))
+  const { activeStore } = useActiveStore()
+  const storeId = activeStore?.id
 
-  const [workflow, setWorkflow] = useState(() => existing || blankWorkflow(template))
-  const [selectedId, setSelectedId] = useState(workflow.nodes[0]?.id || null)
+  const [automation, setAutomation] = useState(null)
+  const [name, setName] = useState('Welcome email')
+  const [triggerType, setTriggerType] = useState('contact.email_subscribed')
+  const [requireEmailSubscribed, setRequireEmailSubscribed] = useState(false)
+  const [delayMinutes, setDelayMinutes] = useState(0)
+  const [subject, setSubject] = useState('Welcome')
+  const [body, setBody] = useState('Thanks for subscribing. We’re glad you’re here.')
+  const [enrollments, setEnrollments] = useState([])
+  const [loading, setLoading] = useState(!isNew)
+  const [saving, setSaving] = useState(false)
+  const [acting, setActing] = useState(false)
+  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
 
-  const selected = useMemo(
-    () => workflow.nodes.find((node) => node.id === selectedId) || null,
-    [workflow.nodes, selectedId],
+  const status = automation?.status || 'draft'
+
+  const load = useCallback(async () => {
+    if (isNew) {
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const [detail, history] = await Promise.all([
+        getAutomation(automationId),
+        listAutomationEnrollments(automationId, { limit: 25 }),
+      ])
+      setAutomation(detail)
+      setName(detail.name || 'Welcome email')
+      setTriggerType(detail.trigger_type || 'contact.email_subscribed')
+      const form = stepsToForm(detail.steps || [])
+      setRequireEmailSubscribed(form.requireEmailSubscribed)
+      setDelayMinutes(form.delayMinutes)
+      setSubject(form.subject)
+      setBody(form.body)
+      setEnrollments(history.data || [])
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unable to load automation.')
+      setAutomation(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [automationId, isNew])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const canEdit = isNew || status === 'draft' || status === 'paused'
+
+  const buildSteps = () =>
+    defaultWelcomeSteps({
+      delayMinutes: Number(delayMinutes) || 0,
+      subject,
+      body,
+      requireEmailSubscribed,
+    })
+
+  const handleSave = async () => {
+    if (!storeId && isNew) {
+      setError('Select a store before creating an automation.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    setNotice(null)
+    try {
+      if (isNew) {
+        const created = await createStoreAutomation(storeId, {
+          name: name.trim() || 'Welcome email',
+          trigger_type: triggerType,
+          steps: buildSteps(),
+        })
+        setNotice('Draft saved.')
+        navigate(`/automation/${created.id}`, { replace: true })
+        return
+      }
+
+      const updated = await updateAutomation(automationId, {
+        name: name.trim() || 'Welcome email',
+        steps: buildSteps(),
+      })
+      setAutomation(updated)
+      setNotice('Draft saved.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unable to save automation.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const runAction = async (action, successMessage) => {
+    setActing(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const updated = await action(automationId)
+      setAutomation(updated)
+      setNotice(successMessage)
+      if (action === archiveAutomation || action === activateAutomation || action === pauseAutomation) {
+        const history = await listAutomationEnrollments(automationId, { limit: 25 })
+        setEnrollments(history.data || [])
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Action failed.')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  const enrollmentColumns = useMemo(
+    () => [
+      {
+        key: 'contact',
+        label: 'Contact',
+        render: (row) => row.contact?.email || row.contact_id,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (row) => <Badge tone={statusTone(row.status)}>{statusLabel(row.status)}</Badge>,
+      },
+      {
+        key: 'step_runs',
+        label: 'Latest step',
+        render: (row) => {
+          const runs = row.step_runs || []
+          const latest = runs[runs.length - 1]
+          if (!latest) return '—'
+          return (
+            <span>
+              {latest.step?.type || 'step'}: {statusLabel(latest.status)}
+              {latest.error_code ? ` (${latest.error_code})` : ''}
+            </span>
+          )
+        },
+      },
+      {
+        key: 'enrolled_at',
+        label: 'Enrolled',
+        render: (row) => formatDateTime(row.enrolled_at),
+      },
+    ],
+    [],
   )
 
-  if (automationId && automationId !== 'new' && !existing) {
+  if (loading) {
+    return <p className="text-sm text-muted">Loading automation…</p>
+  }
+
+  if (!isNew && error && !automation) {
     return (
       <EmptyState
         title="Automation not found"
-        description="This workflow ID is not in the mock dataset."
+        description={error}
         actionLabel="Back to automation"
         onAction={() => navigate('/automation')}
       />
     )
-  }
-
-  const updateSelected = (patch) => {
-    setWorkflow((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) =>
-        node.id === selectedId ? { ...node, ...patch, config: { ...node.config, ...patch.config } } : node,
-      ),
-    }))
-  }
-
-  const addNode = (type) => {
-    const id = `n_${Date.now()}`
-    const labels = {
-      delay: 'Wait 1 day',
-      condition: 'Condition check',
-      action: 'Send message',
-      trigger: 'Trigger',
-    }
-    const y = 40 + workflow.nodes.length * 110
-    setWorkflow((current) => ({
-      ...current,
-      nodes: [
-        ...current.nodes,
-        {
-          id,
-          type,
-          label: labels[type],
-          x: 120,
-          y,
-          config: type === 'action' ? { channel: 'email', subject: '' } : {},
-        },
-      ],
-      edges:
-        current.nodes.length > 0
-          ? [...current.edges, { from: current.nodes[current.nodes.length - 1].id, to: id }]
-          : current.edges,
-    }))
-    setSelectedId(id)
   }
 
   return (
@@ -145,127 +220,149 @@ export function AutomationEditorPage() {
       </div>
 
       <PageHeader
-        title={workflow.name}
-        description="Visual workflow canvas prototype — does not execute real automations."
+        title={isNew ? 'Create automation' : name}
+        description="Linear editor: optional condition branch, optional delay, then email. Visual canvas is not available yet."
         actions={
           <>
-            <Badge tone={statusTone(workflow.status)}>{statusLabel(workflow.status)}</Badge>
-            <Button
-              variant="secondary"
-              onClick={() => alert('Prototype only — workflow status toggled locally.')}
-            >
-              {workflow.status === 'active' ? 'Pause' : 'Activate'}
-            </Button>
-            <Button onClick={() => alert('Prototype only — workflow not persisted.')}>Save</Button>
+            {!isNew && <Badge tone={statusTone(status)}>{statusLabel(status)}</Badge>}
+            {canEdit && (
+              <Button variant="secondary" disabled={saving || acting} onClick={handleSave}>
+                {saving ? 'Saving…' : 'Save draft'}
+              </Button>
+            )}
+            {!isNew && status !== 'active' && status !== 'archived' && (
+              <Button
+                disabled={acting || saving}
+                onClick={() =>
+                  runAction(
+                    activateAutomation,
+                    status === 'paused'
+                      ? 'Automation resumed. Enrollment is active again; due runs will continue.'
+                      : 'Automation activated. Matching contacts can enroll on the selected trigger.',
+                  )
+                }
+              >
+                {status === 'paused' ? 'Resume' : 'Activate'}
+              </Button>
+            )}
+            {!isNew && status === 'active' && (
+              <Button
+                variant="secondary"
+                disabled={acting}
+                onClick={() =>
+                  runAction(
+                    pauseAutomation,
+                    'Automation paused. New contacts will not enroll; pending runs stay frozen until Resume.',
+                  )
+                }
+              >
+                Pause
+              </Button>
+            )}
+            {!isNew && status !== 'archived' && (
+              <Button
+                variant="secondary"
+                disabled={acting}
+                onClick={() =>
+                  runAction(
+                    archiveAutomation,
+                    'Automation archived. Active enrollments and pending runs were cancelled.',
+                  )
+                }
+              >
+                Archive
+              </Button>
+            )}
           </>
         }
       />
 
-      <div className="grid gap-3 xl:grid-cols-[1fr_20rem]">
-        <Card padding={false} className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-            <Button size="sm" variant="secondary" onClick={() => addNode('delay')}>
-              + Delay
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => addNode('condition')}>
-              + Condition
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => addNode('action')}>
-              + Action
-            </Button>
-            <p className="text-xs text-muted">Click a node to edit its settings.</p>
-          </div>
-          <div className="canvas-dots relative h-[32rem] overflow-auto bg-midnight p-6">
-            {workflow.nodes.map((node) => (
-              <button
-                key={node.id}
-                type="button"
-                onClick={() => setSelectedId(node.id)}
-                className={cn(
-                  'absolute w-48 rounded-lg border px-3 py-2 text-left shadow-sm transition',
-                  nodeStyles[node.type] || nodeStyles.action,
-                  selectedId === node.id && 'ring-2 ring-electric',
-                )}
-                style={{ left: node.x, top: node.y }}
+      {notice && <p className="mb-3 text-sm text-success">{notice}</p>}
+      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+
+      <div className="grid gap-3 xl:grid-cols-[1fr_1fr]">
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Configuration</h3>
+          <div className="space-y-3">
+            <FormField label="Name">
+              <Input
+                value={name}
+                disabled={!canEdit || saving}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Trigger">
+              <select
+                className="w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink"
+                value={triggerType}
+                disabled={!isNew || saving}
+                onChange={(event) => setTriggerType(event.target.value)}
               >
-                <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">
-                  {node.type}
-                </p>
-                <p className="text-sm font-medium text-ink">{node.label}</p>
-              </button>
-            ))}
+                <option value="contact.email_subscribed">contact.email_subscribed</option>
+                <option value="contact.tag_added">contact.tag_added</option>
+              </select>
+            </FormField>
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={requireEmailSubscribed}
+                disabled={!canEdit || saving}
+                onChange={(event) => setRequireEmailSubscribed(event.target.checked)}
+              />
+              <span>
+                Require email subscribed before send
+                <span className="mt-0.5 block text-xs text-muted">
+                  Adds a condition branch: if not subscribed, the enrollment ends without sending.
+                </span>
+              </span>
+            </label>
+            <FormField label="Delay before send (minutes)">
+              <Input
+                type="number"
+                min={0}
+                value={delayMinutes}
+                disabled={!canEdit || saving}
+                onChange={(event) => setDelayMinutes(Number(event.target.value) || 0)}
+              />
+            </FormField>
+            <FormField label="Email subject">
+              <Input
+                value={subject}
+                disabled={!canEdit || saving}
+                onChange={(event) => setSubject(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Email body">
+              <Textarea
+                rows={8}
+                value={body}
+                disabled={!canEdit || saving}
+                onChange={(event) => setBody(event.target.value)}
+              />
+            </FormField>
+            {status === 'paused' && (
+              <p className="text-xs text-muted">
+                Paused automations do not enroll new contacts. Save any edits, then choose Resume to
+                reactivate enrollment and continue due runs.
+              </p>
+            )}
+            {!canEdit && (
+              <p className="text-xs text-muted">
+                Pause the automation to edit steps, or archive and create a new draft.
+              </p>
+            )}
           </div>
         </Card>
 
         <Card>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Node settings</h3>
-          {!selected ? (
-            <p className="text-sm text-muted">Select a node on the canvas.</p>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Enrollment & execution history</h3>
+          {isNew ? (
+            <p className="text-sm text-muted">Save and activate to enroll contacts who subscribe.</p>
+          ) : enrollments.length === 0 ? (
+            <p className="text-sm text-muted">No enrollments yet.</p>
           ) : (
-            <div className="space-y-3">
-              <FormField label="Label">
-                <Input
-                  value={selected.label}
-                  onChange={(event) => updateSelected({ label: event.target.value })}
-                />
-              </FormField>
-              <FormField label="Type">
-                <Select
-                  value={selected.type}
-                  onChange={(event) => updateSelected({ type: event.target.value })}
-                >
-                  <option value="trigger">Trigger</option>
-                  <option value="delay">Delay</option>
-                  <option value="condition">Condition</option>
-                  <option value="action">Action</option>
-                </Select>
-              </FormField>
-              {selected.type === 'delay' && (
-                <FormField label="Wait (minutes)">
-                  <Input
-                    type="number"
-                    value={selected.config.waitMinutes || 60}
-                    onChange={(event) =>
-                      updateSelected({ config: { waitMinutes: Number(event.target.value) } })
-                    }
-                  />
-                </FormField>
-              )}
-              {selected.type === 'action' && (
-                <>
-                  <FormField label="Channel">
-                    <Select
-                      value={selected.config.channel || 'email'}
-                      onChange={(event) =>
-                        updateSelected({ config: { channel: event.target.value } })
-                      }
-                    >
-                      <option value="email">Email</option>
-                      <option value="sms">SMS</option>
-                    </Select>
-                  </FormField>
-                  <FormField label="Subject / message">
-                    <Textarea
-                      value={selected.config.subject || ''}
-                      onChange={(event) =>
-                        updateSelected({ config: { subject: event.target.value } })
-                      }
-                    />
-                  </FormField>
-                </>
-              )}
-              {selected.type === 'condition' && (
-                <FormField label="Condition notes">
-                  <Textarea
-                    value={selected.config.notes || ''}
-                    onChange={(event) =>
-                      updateSelected({ config: { notes: event.target.value } })
-                    }
-                    placeholder="Describe the branch logic for this prototype."
-                  />
-                </FormField>
-              )}
-            </div>
+            <Table columns={enrollmentColumns} rows={enrollments} />
           )}
         </Card>
       </div>

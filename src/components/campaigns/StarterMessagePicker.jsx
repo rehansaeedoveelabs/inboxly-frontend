@@ -15,7 +15,7 @@ import {
  * @param {{
  *   channel: 'email' | 'sms',
  *   form: { name?: string, subject?: string, previewText?: string, body?: string },
- *   onApplyFields: (fields: { name: string, subject: string, previewText: string, body: string }) => void,
+ *   onApplyFields: (fields: { name?: string, subject: string, previewText: string, body: string }) => void,
  * }} props
  */
 export function StarterMessagePicker({ channel, form, onApplyFields }) {
@@ -155,7 +155,7 @@ export function StarterMessagePicker({ channel, form, onApplyFields }) {
         description={
           pendingAction?.type === 'scratch'
             ? 'This clears the campaign name and message fields so you can write from scratch.'
-            : 'This replaces the current campaign name and message fields with the selected starter. You can still edit afterward.'
+            : 'This replaces the current subject, preview, and body with the selected starter. Your campaign name is kept. You can still edit afterward.'
         }
         confirmLabel={pendingAction?.type === 'scratch' ? 'Clear content' : 'Replace content'}
         tone="danger"
