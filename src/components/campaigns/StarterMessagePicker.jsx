@@ -18,7 +18,7 @@ import {
  *   onApplyFields: (fields: { name?: string, subject: string, previewText: string, body: string }) => void,
  * }} props
  */
-export function StarterMessagePicker({ channel, form, onApplyFields }) {
+export function StarterMessagePicker({ channel, form, onApplyFields, shopName }) {
   const [category, setCategory] = useState('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -54,7 +54,7 @@ export function StarterMessagePicker({ channel, form, onApplyFields }) {
       return
     }
     if (action?.type === 'starter' && action.starter) {
-      onApplyFields(starterToFormFields(action.starter))
+      onApplyFields(starterToFormFields(action.starter, { shopName }))
     }
   }
 

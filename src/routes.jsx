@@ -10,12 +10,14 @@ import { TagsPage } from './pages/audience/TagsPage'
 import { ImportsPage } from './pages/audience/ImportsPage'
 import { ExportsPage } from './pages/audience/ExportsPage'
 import { CampaignsPage } from './pages/campaigns/CampaignsPage'
+import { CampaignNewPage } from './pages/campaigns/CampaignNewPage'
 import { CampaignWizardPage } from './pages/campaigns/CampaignWizardPage'
 import { CampaignDetailPage } from './pages/campaigns/CampaignDetailPage'
 import { AutomationsPage } from './pages/automation/AutomationsPage'
 import { AutomationTemplatesPage } from './pages/automation/AutomationTemplatesPage'
 import { AutomationEditorPage } from './pages/automation/AutomationEditorPage'
 import { FormsPage } from './pages/forms/FormsPage'
+import { FormTemplatesPage } from './pages/forms/FormTemplatesPage'
 import { FormEditorPage } from './pages/forms/FormEditorPage'
 import { AnalyticsPage } from './pages/insights/AnalyticsPage'
 import { LiveActivityPage } from './pages/insights/LiveActivityPage'
@@ -23,6 +25,8 @@ import { ImageLibraryPage } from './pages/resources/ImageLibraryPage'
 import { BrandAssetsPage } from './pages/resources/BrandAssetsPage'
 import { EmailTemplatesPage } from './pages/resources/EmailTemplatesPage'
 import { EmailTemplateEditorPage } from './pages/resources/EmailTemplateEditorPage'
+import { SmsTemplatesPage } from './pages/resources/SmsTemplatesPage'
+import { SmsTemplateEditorPage } from './pages/resources/SmsTemplateEditorPage'
 import { StoreSettingsPage } from './pages/settings/StoreSettingsPage'
 import { StorefrontIntegrationPage } from './pages/settings/StorefrontIntegrationPage'
 import { MetaIntegrationPage } from './pages/settings/MetaIntegrationPage'
@@ -30,6 +34,8 @@ import { ChannelSettingsPage } from './pages/settings/ChannelSettingsPage'
 import { AccountSettingsPage } from './pages/settings/AccountSettingsPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
+import { VerifyEmailOtpPage } from './pages/auth/VerifyEmailOtpPage'
+import { ShopifyInstallContinuePage } from './pages/auth/ShopifyInstallContinuePage'
 
 export function AppRoutes() {
   return useRoutes([
@@ -50,6 +56,22 @@ export function AppRoutes() {
       ),
     },
     {
+      path: '/verify-email',
+      element: (
+        <ProtectedRoute>
+          <VerifyEmailOtpPage />
+        </ProtectedRoute>
+      ),
+    },
+    {
+      path: '/shopify/install',
+      element: (
+        <ProtectedRoute>
+          <ShopifyInstallContinuePage />
+        </ProtectedRoute>
+      ),
+    },
+    {
       path: '/',
       element: (
         <ProtectedRoute>
@@ -60,6 +82,7 @@ export function AppRoutes() {
         { index: true, element: <DashboardPage /> },
 
         { path: 'campaigns', element: <CampaignsPage /> },
+        { path: 'campaigns/new', element: <CampaignNewPage /> },
         { path: 'campaigns/new/:channel', element: <CampaignWizardPage /> },
         { path: 'campaigns/:campaignId/edit', element: <CampaignWizardPage /> },
         { path: 'campaigns/:campaignId', element: <CampaignDetailPage /> },
@@ -70,6 +93,7 @@ export function AppRoutes() {
         { path: 'automation/:automationId', element: <AutomationEditorPage /> },
 
         { path: 'forms', element: <FormsPage /> },
+        { path: 'forms/templates', element: <FormTemplatesPage /> },
         { path: 'forms/new', element: <FormEditorPage /> },
         { path: 'forms/:formId', element: <FormEditorPage /> },
 
@@ -86,6 +110,8 @@ export function AppRoutes() {
         { path: 'resources/images', element: <ImageLibraryPage /> },
         { path: 'resources/templates', element: <EmailTemplatesPage /> },
         { path: 'resources/templates/:templateId', element: <EmailTemplateEditorPage /> },
+        { path: 'resources/sms-templates', element: <SmsTemplatesPage /> },
+        { path: 'resources/sms-templates/:templateId', element: <SmsTemplateEditorPage /> },
         { path: 'resources/brand', element: <BrandAssetsPage /> },
 
         { path: 'settings/store', element: <StoreSettingsPage /> },

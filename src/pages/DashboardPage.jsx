@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   PageHeader,
   MetricCard,
@@ -29,10 +29,22 @@ export function DashboardPage() {
   const storeId = activeStore?.id
   const { resolved } = useTheme()
   const chart = getChartThemeColors()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const [overview, setOverview] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const shopify = searchParams.get('shopify')
+    if (!shopify) return
+
+    // Legacy OAuth returns landed on `/`. Forward to Storefront so permission
+    // status is verified from Shopify-granted scopes (never invent success here).
+    const params = new URLSearchParams(searchParams)
+    navigate(`/settings/storefront?${params.toString()}`, { replace: true })
+  }, [searchParams, navigate])
 
   const load = useCallback(async () => {
     if (!storeId) {

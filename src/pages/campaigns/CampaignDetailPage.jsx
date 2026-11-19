@@ -27,6 +27,7 @@ import { formatDateTime, formatNumber, statusLabel, statusTone } from '../../lib
 import { useActiveStore } from '../../store/useActiveStore'
 import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
 import { CampaignFacebookPublishPanel } from '../../components/campaigns/CampaignFacebookPublishPanel'
+import { personalizeMergeTags } from '../../lib/emailTemplateCatalog'
 
 export function CampaignDetailPage() {
   const { campaignId } = useParams()
@@ -330,11 +331,20 @@ export function CampaignDetailPage() {
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink">Content</h3>
           {campaign.content_format === 'html' && campaign.html_body ? (
-            <EmailHtmlPreview html={campaign.html_body} className="min-h-[360px]" />
+            <EmailHtmlPreview
+              html={personalizeMergeTags(campaign.html_body, {
+                shopName: activeStore?.name || 'Your shop',
+                firstName: 'Alex',
+              })}
+              className="min-h-[360px]"
+            />
           ) : (
             <div className="rounded-md border border-line bg-midnight p-4">
               <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
-                {campaign.body || '—'}
+                {personalizeMergeTags(campaign.body || '—', {
+                  shopName: activeStore?.name || 'Your shop',
+                  firstName: 'Alex',
+                })}
               </pre>
             </div>
           )}

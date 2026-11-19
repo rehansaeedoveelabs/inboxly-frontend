@@ -59,10 +59,11 @@ export function EmailTemplatePicker({ storeId, disabled, onApply, applyingId }) 
       <Card className="space-y-2">
         <p className="text-sm font-semibold text-ink">Email templates</p>
         <p className="text-sm text-muted">
-          No templates yet. Create one in Resources, then apply it here.
+          No saved templates yet. Pick a built-in design or start from scratch in the library,
+          then apply it here.
         </p>
         <Link to="/resources/templates" className="text-sm text-electric hover:underline">
-          Open email templates
+          Browse template library
         </Link>
       </Card>
     )

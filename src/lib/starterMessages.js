@@ -114,7 +114,17 @@ export const STARTER_MESSAGES = [
     name: 'Welcome SMS',
     subject: null,
     previewText: null,
-    body: 'Welcome to Inboxly Demo. Glad you joined — reply HELP for support or STOP to opt out.',
+    body: 'Welcome to {{shop_name}}! Glad you joined — reply HELP for support or STOP to opt out.',
+  },
+  {
+    id: 'sms-welcome-perk',
+    channel: 'sms',
+    category: 'welcome',
+    label: 'Welcome perk SMS',
+    name: 'Welcome perk SMS',
+    subject: null,
+    previewText: null,
+    body: '{{shop_name}}: your welcome code SAVE15 is ready. Shop now. Reply STOP to opt out.',
   },
   {
     id: 'sms-promo-flash',
@@ -124,7 +134,27 @@ export const STARTER_MESSAGES = [
     name: 'Flash offer SMS',
     subject: null,
     previewText: null,
-    body: 'Inboxly Demo: weekend offer is live. Shop soon — limited time. Reply STOP to opt out.',
+    body: '{{shop_name}}: weekend offer is live. Shop soon — limited time. Reply STOP to opt out.',
+  },
+  {
+    id: 'sms-promo-cart',
+    channel: 'sms',
+    category: 'promotions',
+    label: 'Cart reminder SMS',
+    name: 'Cart reminder SMS',
+    subject: null,
+    previewText: null,
+    body: '{{shop_name}}: you left items in your cart. Finish checkout before they sell out. STOP to opt out.',
+  },
+  {
+    id: 'sms-promo-sale',
+    channel: 'sms',
+    category: 'promotions',
+    label: 'Sale alert SMS',
+    name: 'Sale alert SMS',
+    subject: null,
+    previewText: null,
+    body: '{{shop_name}} sale alert: up to 40% off selected favorites ends tonight. Reply STOP to opt out.',
   },
   {
     id: 'sms-launch-drop',
@@ -134,7 +164,17 @@ export const STARTER_MESSAGES = [
     name: 'New drop SMS',
     subject: null,
     previewText: null,
-    body: 'Inboxly Demo: new arrivals are in. Take a first look today. Reply STOP to opt out.',
+    body: '{{shop_name}}: new arrivals are in. Take a first look today. Reply STOP to opt out.',
+  },
+  {
+    id: 'sms-launch-vip',
+    channel: 'sms',
+    category: 'product_launches',
+    label: 'VIP early access SMS',
+    name: 'VIP early access SMS',
+    subject: null,
+    previewText: null,
+    body: '{{shop_name}} VIP: early access to the new drop is open for you. Shop now. STOP to opt out.',
   },
   {
     id: 'sms-announce-notice',
@@ -144,7 +184,17 @@ export const STARTER_MESSAGES = [
     name: 'Store notice SMS',
     subject: null,
     previewText: null,
-    body: 'Inboxly Demo: quick store update for you. Details are in your inbox. Reply STOP to opt out.',
+    body: '{{shop_name}}: quick store update for you. Check your email for details. Reply STOP to opt out.',
+  },
+  {
+    id: 'sms-announce-shipping',
+    channel: 'sms',
+    category: 'announcements',
+    label: 'Shipping update SMS',
+    name: 'Shipping update SMS',
+    subject: null,
+    previewText: null,
+    body: '{{shop_name}}: your order is on the way. Track it from your account. Reply STOP to opt out.',
   },
   {
     id: 'sms-news-tip',
@@ -154,7 +204,17 @@ export const STARTER_MESSAGES = [
     name: 'Weekly tip SMS',
     subject: null,
     previewText: null,
-    body: 'Inboxly Demo weekly tip: check what is new this week. Reply STOP to opt out.',
+    body: '{{shop_name}} weekly tip: check what is new this week. Reply STOP to opt out.',
+  },
+  {
+    id: 'sms-news-restock',
+    channel: 'sms',
+    category: 'newsletters',
+    label: 'Back in stock SMS',
+    name: 'Back in stock SMS',
+    subject: null,
+    previewText: null,
+    body: 'Good news from {{shop_name}}: an item you liked is back. Grab it before it goes again. STOP to opt out.',
   },
 ]
 
@@ -197,19 +257,27 @@ export function filterStarterMessages({ channel, category = null, query = null }
  * @param {StarterMessage} starter
  * @returns {{ subject: string, previewText: string, body: string }}
  */
-export function starterToFormFields(starter) {
+/**
+ * @param {StarterMessage} starter
+ * @param {{ shopName?: string }} [vars]
+ */
+export function starterToFormFields(starter, vars = {}) {
+  const shopName = vars.shopName || 'Your shop'
+  const replaceShop = (value) =>
+    typeof value === 'string' ? value.replaceAll('{{shop_name}}', shopName) : value
+
   if (starter.channel === 'sms') {
     return {
       subject: '',
       previewText: '',
-      body: starter.body,
+      body: replaceShop(starter.body),
     }
   }
 
   return {
-    subject: starter.subject || '',
-    previewText: starter.previewText || '',
-    body: starter.body,
+    subject: replaceShop(starter.subject || ''),
+    previewText: replaceShop(starter.previewText || ''),
+    body: replaceShop(starter.body),
   }
 }
 

@@ -18,7 +18,8 @@ export function AppShell() {
 
   return (
     <WorkspaceStoresProvider>
-      <div className="flex min-h-full bg-midnight text-ink">
+      {/* Viewport-locked shell: sidebar stays put; only <main> scrolls. */}
+      <div className="flex h-dvh max-h-dvh overflow-hidden bg-midnight text-ink">
         <Sidebar
           mobileOpen={mobileOpen}
           onMobileClose={() => setMobileOpen(false)}
@@ -26,9 +27,9 @@ export function AppShell() {
           onToggleCollapsed={() => setCollapsed((value) => !value)}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Header onMenuClick={() => setMobileOpen(true)} />
-          <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 lg:px-6">
+          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 scrollbar-thin sm:px-5 lg:px-6">
             <div className="mx-auto w-full max-w-[1400px]">
               <Outlet />
             </div>

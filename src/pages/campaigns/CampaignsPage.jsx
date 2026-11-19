@@ -10,7 +10,6 @@ import {
   Badge,
   MetricCard,
   EmptyState,
-  Modal,
   LoadingState,
   ErrorState,
 } from '../../components/ui'
@@ -34,7 +33,6 @@ export function CampaignsPage() {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [tab, setTab] = useState('all')
-  const [createOpen, setCreateOpen] = useState(false)
 
   const [campaigns, setCampaigns] = useState([])
   const [summary, setSummary] = useState({ total: 0, draft: 0, scheduled: 0 })
@@ -170,7 +168,7 @@ export function CampaignsPage() {
             : 'Compose, schedule, and send campaigns. Local email/SMS use fake messaging drivers by default (not real Brevo/carrier delivery).'
         }
         actions={
-          <Button onClick={() => setCreateOpen(true)} disabled={!storeId}>
+          <Button onClick={() => navigate('/campaigns/new')} disabled={!storeId}>
             <Plus className="size-4" />
             Create campaign
           </Button>
@@ -229,7 +227,7 @@ export function CampaignsPage() {
           title="No campaigns match"
           description="Create an email or SMS campaign to get started."
           actionLabel="Create campaign"
-          onAction={() => setCreateOpen(true)}
+          onAction={() => navigate('/campaigns/new')}
         />
       ) : null}
 
@@ -245,36 +243,6 @@ export function CampaignsPage() {
           ) : null}
         </>
       ) : null}
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Choose campaign type"
-        footer={
-          <Button variant="ghost" onClick={() => setCreateOpen(false)}>
-            Cancel
-          </Button>
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            className="rounded-lg border border-line bg-midnight p-4 text-left hover:border-electric"
-            onClick={() => navigate('/campaigns/new/email')}
-          >
-            <p className="font-semibold text-ink">Email campaign</p>
-            <p className="mt-1 text-sm text-muted">Subject, content, audience and schedule.</p>
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-line bg-midnight p-4 text-left hover:border-cantaloupe"
-            onClick={() => navigate('/campaigns/new/sms')}
-          >
-            <p className="font-semibold text-ink">SMS campaign</p>
-            <p className="mt-1 text-sm text-muted">Short message, audience and send time.</p>
-          </button>
-        </div>
-      </Modal>
     </div>
   )
 }

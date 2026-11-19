@@ -9,6 +9,8 @@ import {
   resolveShopifyOAuthCallback,
   shopifyOAuthErrorFlash,
   shopifyOAuthReturnFlash,
+  shopifyBlocksCommerceSync,
+  shopifyMissingScopesDetail,
   shopifyPermissionSummary,
   shopifyScopeLabel,
 } from './shopifyScopes.js'
@@ -42,10 +44,33 @@ describe('shopifyScopes helpers', () => {
   it('normalizes and labels scopes without inventing grants', () => {
     assert.deepEqual(normalizeShopifyScopes([' read_orders ', '', null, 12]), ['read_orders'])
     assert.equal(shopifyScopeLabel('read_all_orders'), 'Read all historical orders')
+    assert.equal(shopifyScopeLabel('write_customers'), 'Update customers in Shopify')
     assert.equal(shopifyScopeLabel('custom_scope'), 'custom_scope')
     assert.deepEqual(describeShopifyScopes(['read_customers']), [
-      { handle: 'read_customers', label: 'Read customers' },
+      {
+        handle: 'read_customers',
+        label: 'Read customers',
+        reason: 'Pull customer profiles into Audience.',
+      },
     ])
+    assert.match(
+      shopifyMissingScopesDetail([{ handle: 'write_customers', label: 'Update customers in Shopify' }]),
+      /push contact edits back to Shopify/i,
+    )
+    assert.equal(
+      shopifyBlocksCommerceSync({
+        is_connected: true,
+        missing_shopify_scopes: ['write_customers'],
+      }),
+      false,
+    )
+    assert.equal(
+      shopifyBlocksCommerceSync({
+        is_connected: true,
+        missing_shopify_scopes: ['read_orders'],
+      }),
+      true,
+    )
     assert.equal(normalizeCallbackStoreId(' 01STOREA '), '01STOREA')
     assert.equal(normalizeCallbackStoreId(''), null)
   })

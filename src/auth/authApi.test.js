@@ -64,25 +64,32 @@ describe('authApi', () => {
       POST: {
         '/api/v1/auth/register': async (_url, options) => {
           registerBody = JSON.parse(options.body)
-          return jsonResponse(201, { data: sampleUser })
+          return jsonResponse(201, {
+            data: sampleUser,
+            meta: { email_otp_required: true, next: 'email_otp' },
+          })
         },
       },
     })
 
-    const user = await registerRequest(
+    const result = await registerRequest(
       {
         name: 'Ada Lovelace',
         email: 'ada@example.com',
+        phone: '+15555550100',
+        shop_name: 'Ada Shop',
         password: 'secret-pass',
         password_confirmation: 'secret-pass',
-        workspace_name: 'Ada Workspace',
       },
       { fetchFn, cookieString: 'XSRF-TOKEN=token' },
     )
 
-    assert.equal(registerBody.workspace_name, 'Ada Workspace')
-    assert.equal(user.name, 'Ada Lovelace')
+    assert.equal(registerBody.shop_name, 'Ada Shop')
+    assert.equal(registerBody.phone, '+15555550100')
+    assert.equal(result.user.name, 'Ada Lovelace')
+    assert.equal(result.email_otp_required, true)
   })
+
 
   it('surfaces login validation failures as ApiError', async () => {
     const fetchFn = createFetchMock({

@@ -9,6 +9,7 @@ import {
   Image,
   LayoutDashboard,
   Mail,
+  MessageSquareText,
   Palette,
   Settings,
   Share2,
@@ -62,6 +63,12 @@ export const navGroups = [
     items: [
       { id: 'images', label: 'Image library', to: '/resources/images', icon: Image },
       { id: 'templates', label: 'Email templates', to: '/resources/templates', icon: FileText },
+      {
+        id: 'sms-templates',
+        label: 'SMS templates',
+        to: '/resources/sms-templates',
+        icon: MessageSquareText,
+      },
       { id: 'brand', label: 'Brand assets', to: '/resources/brand', icon: Palette },
     ],
   },

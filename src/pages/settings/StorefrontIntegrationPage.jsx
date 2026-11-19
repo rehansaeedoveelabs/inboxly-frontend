@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Cable, ExternalLink, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Cable, ExternalLink, CheckCircle2, XCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   PageHeader,
   Card,
@@ -17,11 +17,21 @@ import {
   createShopifyOAuthReturnGate,
   hasHistoricalOrderAccess,
   resolveShopifyOAuthCallback,
+  shopifyBlocksCommerceSync,
   shopifyPermissionSummary,
 } from '../../lib/shopifyScopes'
+import {
+  getShopifyCommerceSync,
+  isShopifySyncInFlight,
+  shopifySyncStatusLabel,
+  shopifySyncStatusTone,
+  startShopifyCommerceSync,
+} from '../../lib/shopifySyncApi'
 import { disconnectShopifyStore, storeStatusLabel, storeStatusTone } from '../../lib/storesApi'
 import { getStorefrontIntegration } from '../../mock'
 import { useActiveStore } from '../../store/useActiveStore'
+
+const SHOPIFY_SYNC_POLL_MS = 2500
 
 function StatusRow({ label, value, ok, detail, tone }) {
   const resolvedTone = tone ?? (ok ? 'success' : 'danger')
@@ -76,6 +86,11 @@ export function StorefrontIntegrationPage() {
   const [connectError, setConnectError] = useState('')
   const [disconnectFlash, setDisconnectFlash] = useState(null)
   const [oauthFlash, setOauthFlash] = useState(null)
+  const [syncStatus, setSyncStatus] = useState(null)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncStarting, setSyncStarting] = useState(false)
+  const [syncError, setSyncError] = useState('')
+  const [syncNotice, setSyncNotice] = useState('')
   const oauthGateRef = useRef(createShopifyOAuthReturnGate())
   const selectedStoreIdRef = useRef(null)
   const { activeStore, stores, status, workspace, refreshStores } = useActiveStore()
@@ -85,6 +100,55 @@ export function StorefrontIntegrationPage() {
   useEffect(() => {
     selectedStoreIdRef.current = activeStore?.id ?? null
   }, [activeStore?.id])
+
+  const loadShopifySync = useCallback(async () => {
+    if (!activeStore?.id || !activeStore?.is_connected) {
+      setSyncStatus(null)
+      setSyncError('')
+      return null
+    }
+
+    setSyncLoading(true)
+    setSyncError('')
+    try {
+      const data = await getShopifyCommerceSync(activeStore.id)
+      if (selectedStoreIdRef.current !== activeStore.id) return null
+      setSyncStatus(data)
+      return data
+    } catch (error) {
+      if (selectedStoreIdRef.current !== activeStore.id) return null
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to load Shopify commerce sync status.'
+      setSyncError(message)
+      return null
+    } finally {
+      if (selectedStoreIdRef.current === activeStore.id) {
+        setSyncLoading(false)
+      }
+    }
+  }, [activeStore?.id, activeStore?.is_connected])
+
+  useEffect(() => {
+    loadShopifySync()
+  }, [loadShopifySync])
+
+  useEffect(() => {
+    if (!isShopifySyncInFlight(syncStatus)) return undefined
+
+    let cancelled = false
+    const tick = async () => {
+      if (cancelled) return
+      await loadShopifySync()
+    }
+
+    const interval = window.setInterval(tick, SHOPIFY_SYNC_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [syncStatus, loadShopifySync])
 
   useEffect(() => {
     const shopify = searchParams.get('shopify')
@@ -165,7 +229,20 @@ export function StorefrontIntegrationPage() {
   const canReconnect = canReconnectStore(activeStore)
   const permissions = shopifyPermissionSummary(activeStore)
   const needsReauth = permissions.state === 'needs_reauth'
+  const blocksCommerceSync = shopifyBlocksCommerceSync(activeStore)
   const historicalOrders = hasHistoricalOrderAccess(activeStore)
+  const syncRunStatus =
+    syncStatus?.latest_run?.status ?? syncStatus?.summary?.status ?? activeStore?.shopify_sync?.status ?? null
+  const syncCounts = syncStatus?.counts ?? {
+    customer_identities: Number(activeStore?.shopify_sync?.customers_synced) || 0,
+    products: Number(activeStore?.shopify_sync?.products_synced) || 0,
+    orders: Number(activeStore?.shopify_sync?.orders_synced) || 0,
+  }
+  const syncFinishedAt =
+    syncStatus?.latest_run?.finished_at ??
+    syncStatus?.summary?.finished_at ??
+    activeStore?.shopify_sync?.finished_at ??
+    null
 
   const embedOk = integration.appEmbedEnabled
   const trackingOk = integration.storefrontTracking === 'active'
@@ -208,6 +285,30 @@ export function StorefrontIntegrationPage() {
             : 'Network error while starting Shopify connection.'
       setConnectError(message)
       setConnecting(false)
+    }
+  }
+
+  const startCommerceSync = async () => {
+    if (!activeStore?.id || syncStarting || blocksCommerceSync) return
+    setSyncStarting(true)
+    setSyncError('')
+    setSyncNotice('')
+    try {
+      await startShopifyCommerceSync(activeStore.id)
+      setSyncNotice('Commerce sync queued. Status updates automatically.')
+      await loadShopifySync()
+      await refreshStores()
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setSyncError('A sync is already in progress for this store.')
+        await loadShopifySync()
+      } else {
+        setSyncError(
+          error instanceof ApiError ? error.message : 'Unable to start Shopify commerce sync.',
+        )
+      }
+    } finally {
+      setSyncStarting(false)
     }
   }
 
@@ -256,7 +357,7 @@ export function StorefrontIntegrationPage() {
     <div>
       <PageHeader
         title="Storefront integration"
-        description="Connect a real Inboxly store to Shopify through OAuth."
+        description="New merchants connect Shopify during signup. Use this page to review permissions, reconnect, or run commerce sync."
         actions={<Badge tone="accent">Shopify OAuth</Badge>}
       />
 
@@ -383,16 +484,16 @@ export function StorefrontIntegrationPage() {
               className="rounded-md border border-cantaloupe/40 bg-cantaloupe/10 px-3 py-3 text-sm text-cantaloupe-ink"
             >
               <p className="font-medium">Additional Shopify permissions are required</p>
-              <p className="mt-1 text-xs">
-                The store stays connected. Reconnect Shopify and approve the missing scopes so
-                Inboxly can sync commerce data in a later phase.
-              </p>
+              <p className="mt-1 text-xs">{permissions.detail}</p>
               {permissions.missing.length > 0 ? (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-xs">
                   {permissions.missing.map((scope) => (
                     <li key={scope.handle}>
                       <span className="font-medium">{scope.label}</span>
                       <span className="text-muted"> ({scope.handle})</span>
+                      {scope.reason ? (
+                        <span className="mt-0.5 block text-muted">{scope.reason}</span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -451,6 +552,107 @@ export function StorefrontIntegrationPage() {
         </Card>
       ) : null}
 
+      {storeConnected ? (
+        <Card className="mb-4 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">Commerce sync</h3>
+              <p className="mt-1 text-xs text-muted">
+                Pull customers, products, and orders into Inboxly. Customers appear under Audience
+                with name, email, and phone when Shopify provides them.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={shopifySyncStatusTone(syncRunStatus)}>
+                {shopifySyncStatusLabel(syncRunStatus)}
+              </Badge>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => loadShopifySync()}
+                disabled={syncLoading || syncStarting}
+              >
+                <RefreshCw className={cn('size-3.5', syncLoading ? 'animate-spin' : '')} />
+                Refresh
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => startCommerceSync()}
+                disabled={
+                  syncStarting ||
+                  syncLoading ||
+                  blocksCommerceSync ||
+                  isShopifySyncInFlight(syncStatus)
+                }
+              >
+                {syncStarting || isShopifySyncInFlight(syncStatus)
+                  ? 'Syncing…'
+                  : 'Sync now'}
+              </Button>
+            </div>
+          </div>
+
+          {blocksCommerceSync ? (
+            <p className="text-xs text-cantaloupe-ink">
+              Approve missing Shopify read permissions before starting a commerce sync.
+            </p>
+          ) : needsReauth ? (
+            <p className="text-xs text-muted">
+              Commerce sync can run with your current read scopes. Reconnect to approve write_customers
+              for contact write-back.
+            </p>
+          ) : null}
+
+          {syncNotice ? (
+            <div
+              role="status"
+              className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+            >
+              {syncNotice}
+            </div>
+          ) : null}
+
+          {syncError ? (
+            <div
+              role="alert"
+              className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+            >
+              {syncError}
+            </div>
+          ) : null}
+
+          {syncLoading && !syncStatus ? (
+            <LoadingState label="Loading sync status…" />
+          ) : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-md border border-line bg-midnight px-3 py-3">
+                  <p className="text-xs text-muted">Customer IDs</p>
+                  <p className="mt-1 text-lg font-semibold text-ink">
+                    {syncCounts.customer_identities}
+                  </p>
+                </div>
+                <div className="rounded-md border border-line bg-midnight px-3 py-3">
+                  <p className="text-xs text-muted">Products</p>
+                  <p className="mt-1 text-lg font-semibold text-ink">{syncCounts.products}</p>
+                </div>
+                <div className="rounded-md border border-line bg-midnight px-3 py-3">
+                  <p className="text-xs text-muted">Orders</p>
+                  <p className="mt-1 text-lg font-semibold text-ink">{syncCounts.orders}</p>
+                </div>
+              </div>
+              {syncFinishedAt ? (
+                <p className="text-xs text-muted">
+                  Last finished {new Date(syncFinishedAt).toLocaleString()}
+                </p>
+              ) : (
+                <p className="text-xs text-muted">No completed sync yet for this store.</p>
+              )}
+            </>
+          )}
+        </Card>
+      ) : null}
+
       <Card className="mb-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -482,6 +684,23 @@ export function StorefrontIntegrationPage() {
               : needsReauth
                 ? `${permissions.missing.length} missing scope${permissions.missing.length === 1 ? '' : 's'}`
                 : 'Based on scopes returned by Shopify'
+          }
+        />
+        <StatusRow
+          label="Commerce sync"
+          value={!storeConnected ? 'Not applicable' : shopifySyncStatusLabel(syncRunStatus)}
+          ok={storeConnected && syncRunStatus === 'succeeded'}
+          tone={
+            !storeConnected
+              ? 'neutral'
+              : shopifySyncStatusTone(syncRunStatus)
+          }
+          detail={
+            !storeConnected
+              ? 'Connect Shopify to sync commerce data'
+              : syncRunStatus
+                ? `${syncCounts.customer_identities} customers · ${syncCounts.products} products · ${syncCounts.orders} orders`
+                : 'Run Sync now after permissions are granted'
           }
         />
       </Card>

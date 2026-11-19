@@ -63,10 +63,10 @@ export function AuthProvider({ children }) {
   }, [])
 
   const register = useCallback(async (payload) => {
-    const nextUser = await registerRequest(payload)
-    setUser(nextUser)
+    const result = await registerRequest(payload)
+    setUser(result.user)
     setStatus('authenticated')
-    return nextUser
+    return result
   }, [])
 
   const logout = useCallback(async () => {

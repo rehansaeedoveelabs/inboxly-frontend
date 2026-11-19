@@ -10,8 +10,9 @@ export function RegisterPage() {
   const navigate = useNavigate()
 
   const [name, setName] = useState('')
+  const [shopName, setShopName] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [workspaceName, setWorkspaceName] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -25,14 +26,19 @@ export function RegisterPage() {
     setSubmitting(true)
 
     try {
-      await register({
+      const result = await register({
         name,
         email,
+        phone,
+        shop_name: shopName,
         password,
         password_confirmation: passwordConfirmation,
-        workspace_name: workspaceName.trim() || undefined,
       })
-      navigate('/', { replace: true })
+      if (result?.email_otp_required !== false) {
+        navigate('/verify-email', { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         setFormError(error.message)
@@ -47,17 +53,9 @@ export function RegisterPage() {
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Start an Inboxly workspace for your brand."
-      footer={
-        <>
-          Already have an account?{' '}
-          <Link className="font-medium text-electric hover:underline" to="/login">
-            Sign in
-          </Link>
-        </>
-      }
+      subtitle="Enter your shop details. You will connect Shopify after email verification — no shop URL required."
     >
-      <form className="space-y-4" onSubmit={onSubmit} noValidate>
+      <form className="space-y-4" onSubmit={onSubmit}>
         {formError ? (
           <div
             role="alert"
@@ -67,12 +65,32 @@ export function RegisterPage() {
           </div>
         ) : null}
 
+        <FormField label="Shop name" htmlFor="register-shop-name" error={fieldErrors.shop_name?.[0]}>
+          <Input
+            id="register-shop-name"
+            value={shopName}
+            onChange={(e) => setShopName(e.target.value)}
+            autoComplete="organization"
+            required
+          />
+        </FormField>
+
         <FormField label="Full name" htmlFor="register-name" error={fieldErrors.name?.[0]}>
           <Input
             id="register-name"
-            autoComplete="name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            required
+          />
+        </FormField>
+
+        <FormField label="Phone" htmlFor="register-phone" error={fieldErrors.phone?.[0]}>
+          <Input
+            id="register-phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="tel"
             required
           />
         </FormField>
@@ -81,41 +99,21 @@ export function RegisterPage() {
           <Input
             id="register-email"
             type="email"
-            autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
             required
           />
         </FormField>
 
-        <FormField
-          label="Workspace name"
-          htmlFor="register-workspace"
-          hint="Optional — defaults to your name’s workspace."
-          error={fieldErrors.workspace_name?.[0]}
-        >
-          <Input
-            id="register-workspace"
-            value={workspaceName}
-            onChange={(event) => setWorkspaceName(event.target.value)}
-            placeholder="Acme Marketing"
-          />
-        </FormField>
-
-        <FormField
-          label="Password"
-          htmlFor="register-password"
-          hint="At least 8 characters."
-          error={fieldErrors.password?.[0]}
-        >
+        <FormField label="Password" htmlFor="register-password" error={fieldErrors.password?.[0]}>
           <Input
             id="register-password"
             type="password"
-            autoComplete="new-password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
             required
-            minLength={8}
           />
         </FormField>
 
@@ -127,17 +125,23 @@ export function RegisterPage() {
           <Input
             id="register-password-confirmation"
             type="password"
-            autoComplete="new-password"
             value={passwordConfirmation}
-            onChange={(event) => setPasswordConfirmation(event.target.value)}
+            onChange={(e) => setPasswordConfirmation(e.target.value)}
+            autoComplete="new-password"
             required
-            minLength={8}
           />
         </FormField>
 
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? 'Creating account…' : 'Create account'}
         </Button>
+
+        <p className="text-center text-sm text-muted">
+          Already have an account?{' '}
+          <Link className="font-medium text-electric hover:underline" to="/login">
+            Sign in
+          </Link>
+        </p>
       </form>
     </AuthLayout>
   )

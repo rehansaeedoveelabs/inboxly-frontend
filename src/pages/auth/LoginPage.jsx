@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button, FormField, Input } from '../../components/ui'
 import { ApiError } from '../../lib/api'
+import { startShopifyInstallRequest } from '../../auth/authApi'
 import { useAuth } from '../../auth/useAuth'
+import { listWorkspaceStores } from '../../lib/storesApi'
 import { AuthLayout } from './AuthLayout'
 
 export function LoginPage() {
@@ -25,7 +27,27 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      await login({ email, password, remember })
+      const user = await login({ email, password, remember })
+      if (!user?.email_verified) {
+        navigate('/verify-email', { replace: true })
+        return
+      }
+
+      const workspaceId = user?.workspaces?.[0]?.id
+      if (workspaceId) {
+        try {
+          const stores = await listWorkspaceStores(workspaceId)
+          const connected = stores.some((store) => store?.is_connected)
+          if (!connected) {
+            const url = await startShopifyInstallRequest()
+            window.location.assign(url)
+            return
+          }
+        } catch {
+          // Fall through to dashboard if install resume fails.
+        }
+      }
+
       navigate(redirectTo, { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {
