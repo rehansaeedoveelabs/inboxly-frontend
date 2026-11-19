@@ -4,6 +4,7 @@ import {
   canReconcilePublication,
   canRetryPublication,
   defaultSelectedPageIds,
+  isPublicationInFlight,
   publicationStatusTone,
 } from './campaignMetaUi.js'
 
@@ -36,5 +37,8 @@ describe('campaignMetaUi', () => {
     assert.equal(canRetryPublication({ status: 'published' }), false)
     assert.equal(canReconcilePublication({ status: 'outcome_unknown' }), true)
     assert.equal(canReconcilePublication({ status: 'failed' }), false)
+    assert.equal(isPublicationInFlight({ status: 'queued' }), true)
+    assert.equal(isPublicationInFlight({ status: 'publishing' }), true)
+    assert.equal(isPublicationInFlight({ status: 'published' }), false)
   })
 })

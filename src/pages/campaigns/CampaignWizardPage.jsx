@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
   PageHeader,
@@ -7,7 +7,6 @@ import {
   Card,
   FormField,
   Input,
-  Textarea,
   Select,
   Badge,
   Tabs,
@@ -17,23 +16,25 @@ import {
 } from '../../components/ui'
 import { ApiError } from '../../lib/api'
 import {
-  applyCampaignTemplate,
   createStoreCampaign,
   getCampaign,
   previewCampaignAudience,
   scheduleCampaign,
   updateCampaign,
 } from '../../lib/campaignsApi'
+import {
+  campaignTemplateReturnPath,
+  setCampaignTemplatePick,
+} from '../../lib/campaignTemplatePick'
 import { listStoreSegments } from '../../lib/segmentsApi'
 import { firstFieldError } from '../../lib/tagsUi'
 import { useActiveStore } from '../../store/useActiveStore'
-import { StarterMessagePicker } from '../../components/campaigns/StarterMessagePicker'
-import { EmailTemplatePicker } from '../../components/campaigns/EmailTemplatePicker'
-import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
+import { CampaignTemplateStep } from '../../components/campaigns/CampaignTemplateStep'
 
 const steps = [
-  { id: 'setup', label: 'Setup' },
-  { id: 'content', label: 'Content' },
+  { id: 'settings', label: 'Settings' },
+  { id: 'template', label: 'Template' },
+  { id: 'audience', label: 'Audience' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'review', label: 'Review' },
 ]
@@ -80,6 +81,7 @@ function audienceLabel(form, segments) {
 
 export function CampaignWizardPage() {
   const { channel: channelParam, campaignId } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { activeStore, status: storeStatus } = useActiveStore()
   const storeId = activeStore?.id
@@ -87,8 +89,14 @@ export function CampaignWizardPage() {
 
   const [channel, setChannel] = useState(channelParam === 'sms' ? 'sms' : 'email')
   const isSms = channel === 'sms'
+  const shopName = activeStore?.name || activeStore?.shopify_shop_domain || 'Your shop'
 
-  const [step, setStep] = useState('setup')
+  const initialStep = (() => {
+    const fromQuery = searchParams.get('step')
+    return steps.some((item) => item.id === fromQuery) ? fromQuery : 'settings'
+  })()
+
+  const [step, setStep] = useState(initialStep)
   const [errors, setErrors] = useState({})
   const [form, setForm] = useState(() => emptyForm(channelParam === 'sms' ? 'sms' : 'email'))
   const [segments, setSegments] = useState([])
@@ -97,15 +105,29 @@ export function CampaignWizardPage() {
   const [loadNonce, setLoadNonce] = useState(0)
   const [notFound, setNotFound] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [browsingTemplates, setBrowsingTemplates] = useState(false)
   const [actionError, setActionError] = useState('')
   const [previewCount, setPreviewCount] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [persistedId, setPersistedId] = useState(campaignId || null)
-  const [applyingTemplateId, setApplyingTemplateId] = useState('')
 
   const stepIndex = steps.findIndex((item) => item.id === step)
-  const hasHtmlContent = !isSms && form.contentFormat === 'html' && Boolean(form.htmlBody?.trim())
+
+  const stepFromQuery = searchParams.get('step')
+
+  // Return from Email Templates with ?step=template — refresh campaign so html_body is loaded.
+  useEffect(() => {
+    if (stepFromQuery && steps.some((item) => item.id === stepFromQuery)) {
+      setStep(stepFromQuery)
+    }
+  }, [stepFromQuery])
+
+  useEffect(() => {
+    if (stepFromQuery === 'template' && isEdit) {
+      setLoadNonce((value) => value + 1)
+    }
+  }, [stepFromQuery, isEdit, campaignId])
 
   useEffect(() => {
     if (storeStatus === 'loading' || !storeId) return undefined
@@ -209,21 +231,25 @@ export function CampaignWizardPage() {
 
   const validate = (targetStep) => {
     const nextErrors = {}
-    if (targetStep === 'setup' || targetStep === 'content' || targetStep === 'schedule' || targetStep === 'review') {
-      if (!form.name.trim()) nextErrors.name = 'Campaign name is required.'
+    const afterSettings = ['settings', 'template', 'audience', 'schedule', 'review'].includes(targetStep)
+    if (afterSettings && !form.name.trim()) nextErrors.name = 'Campaign name is required.'
+
+    if (['template', 'audience', 'schedule', 'review'].includes(targetStep)) {
+      // Email clients always show a subject line — required even when HTML body exists.
+      if (!isSms && !form.subject.trim()) {
+        nextErrors.subject = 'Subject is required for email campaigns.'
+      }
+      if (!form.body.trim() && !form.htmlBody?.trim()) {
+        nextErrors.body = 'Content is required. Browse a template or create a new message.'
+      }
+    }
+
+    if (['audience', 'schedule', 'review'].includes(targetStep)) {
       if (form.audienceType === 'segment' && !form.segmentId) {
         nextErrors.segmentId = 'Choose a segment.'
       }
     }
-    if (targetStep === 'content' || targetStep === 'schedule' || targetStep === 'review') {
-      if (!isSms && !form.subject.trim()) nextErrors.subject = 'Subject is required for email.'
-      if (!form.body.trim() && !(form.contentFormat === 'html' && form.htmlBody?.trim())) {
-        nextErrors.body = 'Content is required.'
-      }
-    }
-    if (targetStep === 'schedule' || targetStep === 'review') {
-      // schedule datetime is only required when scheduling, checked at submit
-    }
+
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
   }
@@ -253,11 +279,10 @@ export function CampaignWizardPage() {
     } else {
       payload.subject = form.subject
       payload.preview_text = form.previewText
-      // Keep HTML/plain in sync with the server. Plain saves must clear a prior
-      // template html_body so send does not keep stale HTML beside edited text.
-      if (form.contentFormat === 'html' && form.contentDocument) {
-        payload.content_document = form.contentDocument
-      } else {
+      // apply-template owns HTML snapshots. Ordinary saves must not re-send
+      // content_document (that re-renders and overwrites body). Only clear HTML
+      // when the merchant explicitly switched to plain via Create new.
+      if (form.contentFormat === 'plain') {
         payload.content_document = null
       }
     }
@@ -277,43 +302,36 @@ export function CampaignWizardPage() {
     return created
   }
 
-  const applyTemplate = async (template) => {
-    if (!storeId || applyingTemplateId || isSms) return
+  /**
+   * Persist draft, stash return context, open Email or SMS Templates.
+   * After Choose/Use there, merchant lands back on Template step with content applied.
+   */
+  const browseTemplates = async () => {
+    if (!storeId || browsingTemplates) return
     if (!form.name.trim()) {
-      setErrors((current) => ({ ...current, name: 'Campaign name is required.' }))
-      setStep('setup')
+      setErrors((current) => ({ ...current, name: 'Campaign name is required before browsing templates.' }))
+      setStep('settings')
       return
     }
-    setApplyingTemplateId(template.id)
+    setBrowsingTemplates(true)
     setActionError('')
     try {
-      let id = persistedId || campaignId
-      if (!id) {
-        const created = await createStoreCampaign(storeId, {
-          ...buildPayload(),
-          channel: 'email',
-        })
-        id = created.id
-        setPersistedId(id)
-        navigate(`/campaigns/${id}/edit`, { replace: true })
-      }
-      const updated = await applyCampaignTemplate(id, { email_template_id: template.id })
-      setForm((current) => ({
-        ...current,
-        name: current.name,
-        subject: updated.subject || current.subject,
-        previewText: updated.preview_text || current.previewText,
-        body: updated.body || current.body,
-        contentFormat: updated.content_format === 'html' ? 'html' : 'plain',
-        htmlBody: updated.html_body || '',
-        contentDocument: updated.content_document || null,
-        emailTemplateId: updated.email_template_id || template.id,
-      }))
-      setErrors((current) => ({ ...current, body: undefined, subject: undefined }))
+      const saved = await persistCampaign()
+      setPersistedId(saved.id)
+      setCampaignTemplatePick({
+        campaignId: saved.id,
+        storeId,
+        returnTo: campaignTemplateReturnPath(saved.id),
+        campaignName: form.name.trim(),
+        channel: isSms ? 'sms' : 'email',
+      })
+      navigate(isSms ? '/resources/sms-templates' : '/resources/templates')
     } catch (error) {
-      setActionError(error instanceof ApiError ? error.message : 'Unable to apply the template.')
+      setActionError(
+        error instanceof ApiError ? error.message : 'Unable to open templates for this campaign.',
+      )
     } finally {
-      setApplyingTemplateId('')
+      setBrowsingTemplates(false)
     }
   }
 
@@ -471,7 +489,7 @@ export function CampaignWizardPage() {
               ? 'Create SMS campaign'
               : 'Create email campaign'
         }
-        description="Compose a draft, schedule it, or send later. Locally, email and SMS use fake messaging drivers (not real Brevo or carrier delivery)."
+        description="Settings → template → audience → schedule → review. WhatsApp campaigns are not available in this flow."
         actions={<Badge tone="info">{isSms ? 'SMS' : 'Email'}</Badge>}
       />
 
@@ -488,7 +506,7 @@ export function CampaignWizardPage() {
         items={steps.map((item) => ({ value: item.id, label: item.label }))}
       />
 
-      {step === 'setup' && (
+      {step === 'settings' && (
         <Card className="space-y-3">
           <FormField label="Campaign name" error={errors.name}>
             <Input
@@ -496,6 +514,53 @@ export function CampaignWizardPage() {
               onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
             />
           </FormField>
+          <p className="text-sm text-muted">
+            Name this {isSms ? 'SMS' : 'email'} campaign. You will choose a template next.
+          </p>
+        </Card>
+      )}
+
+      {step === 'template' && (
+        <CampaignTemplateStep
+          channel={channel}
+          form={form}
+          errors={errors}
+          shopName={shopName}
+          browsing={browsingTemplates}
+          onBrowseTemplates={browseTemplates}
+          onChangeForm={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          onClearErrors={() =>
+            setErrors((current) => ({
+              ...current,
+              name: undefined,
+              subject: undefined,
+              body: undefined,
+            }))
+          }
+          onResetContent={() =>
+            setForm((current) => ({
+              ...current,
+              subject: '',
+              previewText: '',
+              body: '',
+              contentFormat: 'plain',
+              htmlBody: '',
+              contentDocument: null,
+              emailTemplateId: null,
+            }))
+          }
+          onApplyStarterFields={(fields) => {
+            const next = { ...fields }
+            if (typeof next.body === 'string') {
+              next.body = next.body.replaceAll('{{shop_name}}', shopName)
+            }
+            setForm((current) => ({ ...current, ...next }))
+          }}
+        />
+      )}
+
+      {step === 'audience' && (
+        <Card className="space-y-3">
           <FormField label="Audience" error={errors.segmentId}>
             <Select
               value={
@@ -535,97 +600,6 @@ export function CampaignWizardPage() {
             </p>
           ) : null}
         </Card>
-      )}
-
-      {step === 'content' && (
-        <div className="space-y-3">
-          <StarterMessagePicker
-            channel={channel}
-            form={form}
-            onApplyFields={(fields) => {
-              setForm((current) => ({ ...current, ...fields }))
-              setErrors((current) => ({
-                ...current,
-                name: undefined,
-                subject: undefined,
-                body: undefined,
-              }))
-            }}
-          />
-
-          {!isSms ? (
-            <EmailTemplatePicker
-              storeId={storeId}
-              disabled={Boolean(applyingTemplateId) || submitting}
-              applyingId={applyingTemplateId}
-              onApply={applyTemplate}
-            />
-          ) : null}
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <Card className="space-y-3">
-              {!isSms ? (
-                <>
-                  <FormField label="Subject line" error={errors.subject}>
-                    <Input
-                      value={form.subject}
-                      onChange={(event) =>
-                        setForm((value) => ({ ...value, subject: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField label="Preview text">
-                    <Input
-                      value={form.previewText}
-                      onChange={(event) =>
-                        setForm((value) => ({ ...value, previewText: event.target.value }))
-                      }
-                    />
-                  </FormField>
-                </>
-              ) : null}
-              <FormField
-                label={isSms ? 'SMS message' : hasHtmlContent ? 'Plain-text fallback' : 'Email body'}
-                error={errors.body}
-              >
-                <Textarea
-                  rows={hasHtmlContent ? 6 : 12}
-                  value={form.body}
-                  onChange={(event) =>
-                    setForm((value) => ({ ...value, body: event.target.value }))
-                  }
-                />
-              </FormField>
-              {hasHtmlContent ? (
-                <p className="text-xs text-muted">
-                  HTML template applied
-                  {form.emailTemplateId ? ` (from template ${form.emailTemplateId.slice(0, 8)}…)` : ''}.
-                  Edit the template under Resources to change the layout, then re-apply.
-                </p>
-              ) : null}
-              {isSms ? (
-                <p className="text-xs text-muted">{form.body.length}/160 characters (soft limit)</p>
-              ) : null}
-            </Card>
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-ink">Preview</h3>
-              {hasHtmlContent ? (
-                <EmailHtmlPreview html={form.htmlBody} className="min-h-[420px]" />
-              ) : (
-                <div className="rounded-md border border-line bg-midnight p-4">
-                  {!isSms ? (
-                    <p className="mb-2 text-sm font-semibold text-ink">
-                      {form.subject || 'Subject'}
-                    </p>
-                  ) : null}
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-muted">
-                    {form.body || 'Message body'}
-                  </pre>
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
       )}
 
       {step === 'schedule' && (
@@ -673,12 +647,24 @@ export function CampaignWizardPage() {
         </Card>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <Button variant="ghost" onClick={stepIndex === 0 ? () => navigate('/campaigns') : goBack}>
-          {stepIndex === 0 ? 'Cancel' : 'Back'}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+        <Button
+          variant="ghost"
+          onClick={
+            stepIndex === 0
+              ? () => navigate(isEdit ? '/campaigns' : '/campaigns/new')
+              : goBack
+          }
+        >
+          {stepIndex === 0 ? 'Back' : 'Back'}
         </Button>
         {step !== 'review' ? (
-          <Button onClick={goNext}>Continue</Button>
+          <Button
+            onClick={goNext}
+            disabled={step === 'template' && !form.body.trim() && !form.htmlBody?.trim()}
+          >
+            Continue
+          </Button>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" disabled={submitting} onClick={saveDraft}>

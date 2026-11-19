@@ -1,3 +1,4 @@
+import { forwardRef } from 'react'
 import { cn } from '../../lib/cn'
 
 const fieldBase =
@@ -7,9 +8,15 @@ export function Input({ className, ...props }) {
   return <input className={cn(fieldBase, 'h-9', className)} {...props} />
 }
 
-export function Textarea({ className, ...props }) {
-  return <textarea className={cn(fieldBase, 'min-h-[5.5rem] resize-y', className)} {...props} />
-}
+export const Textarea = forwardRef(function Textarea({ className, ...props }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      className={cn(fieldBase, 'min-h-[5.5rem] resize-y', className)}
+      {...props}
+    />
+  )
+})
 
 export function Select({ className, children, ...props }) {
   return (

@@ -26,3 +26,20 @@ export async function getStoreInsightsOverview(storeId) {
 
   return payload
 }
+
+/**
+ * GET /api/v1/stores/{store}/insights/activity
+ *
+ * @param {string} storeId
+ */
+export async function getStoreInsightsActivity(storeId) {
+  const path = storeAudiencePath(storeId, 'insights/activity')
+  const response = await audienceFetch(path)
+  assertAudienceOk(response, 'Unable to load live activity.')
+  const payload = await readAudienceJson(response)
+  const rows = Array.isArray(payload?.data) ? payload.data : []
+  return {
+    data: rows,
+    meta: payload?.meta && typeof payload.meta === 'object' ? payload.meta : {},
+  }
+}

@@ -1,22 +1,21 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
-  PageHeader,
-  Button,
-  Card,
-  FormField,
-  Input,
-  Select,
-  Badge,
+  ConfirmDialog,
   LoadingState,
   ErrorState,
   EmptyState,
 } from '../../components/ui'
-import { EmailBlockEditor } from '../../components/emailTemplates/EmailBlockEditor'
-import { EmailHtmlPreview } from '../../components/emailTemplates/EmailHtmlPreview'
+import { EmailTemplateStudio } from '../../components/emailTemplates/studio/EmailTemplateStudio'
 import { ApiError } from '../../lib/api'
-import { listStoreAssets } from '../../lib/assetsApi'
+import { listStoreAssets, uploadStoreAsset } from '../../lib/assetsApi'
+import { applyCampaignTemplate } from '../../lib/campaignsApi'
+import {
+  clearCampaignTemplatePick,
+  finishCampaignTemplatePick,
+  getCampaignTemplatePick,
+} from '../../lib/campaignTemplatePick'
+import { personalizeEmailDocument } from '../../lib/emailTemplateCatalog'
 import {
   deleteEmailTemplate,
   emptyEmailDocument,
@@ -32,24 +31,36 @@ export function EmailTemplateEditorPage() {
   const navigate = useNavigate()
   const { activeStore, status: storeStatus } = useActiveStore()
   const storeId = activeStore?.id
+  const shopName = activeStore?.name || activeStore?.shopify_shop_domain || 'Your shop'
+  const [pickContext] = useState(() => getCampaignTemplatePick())
+  const pickingForCampaign = Boolean(pickContext?.campaignId)
 
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [loadNonce, setLoadNonce] = useState(0)
+  const [readyForLivePreview, setReadyForLivePreview] = useState(false)
 
   const [name, setName] = useState('')
   const [category, setCategory] = useState('general')
   const [status, setStatus] = useState('draft')
   const [document, setDocument] = useState(emptyEmailDocument())
   const [assets, setAssets] = useState([])
+  const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetsError, setAssetsError] = useState('')
+  const [assetUploading, setAssetUploading] = useState(false)
+  const [assetsNonce, setAssetsNonce] = useState(0)
 
   const [previewHtml, setPreviewHtml] = useState('')
   const [previewError, setPreviewError] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const previewRequestId = useRef(0)
 
   const [saving, setSaving] = useState(false)
+  const [usingInCampaign, setUsingInCampaign] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [actionError, setActionError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -58,19 +69,20 @@ export function EmailTemplateEditorPage() {
 
     let cancelled = false
     setLoading(true)
+    setReadyForLivePreview(false)
     setLoadError('')
     setNotFound(false)
 
-    Promise.all([getEmailTemplate(templateId), listStoreAssets(storeId, { limit: 100 })])
-      .then(([template, assetPage]) => {
+    getEmailTemplate(templateId)
+      .then((template) => {
         if (cancelled) return
         setName(template.name || '')
         setCategory(template.category || 'general')
         setStatus(template.status || 'draft')
         setDocument(template.document || emptyEmailDocument())
         setPreviewHtml(template.html || '')
-        setAssets(assetPage.data || [])
         setLoading(false)
+        setReadyForLivePreview(true)
       })
       .catch((error) => {
         if (cancelled) return
@@ -87,28 +99,118 @@ export function EmailTemplateEditorPage() {
     }
   }, [storeId, storeStatus, templateId, loadNonce])
 
+  useEffect(() => {
+    if (storeStatus === 'loading' || !storeId) return undefined
+
+    let cancelled = false
+    setAssetsLoading(true)
+    setAssetsError('')
+
+    listStoreAssets(storeId, { limit: 100 })
+      .then((assetPage) => {
+        if (cancelled) return
+        setAssets(assetPage.data || [])
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setAssets([])
+        setAssetsError(error instanceof ApiError ? error.message : 'Unable to load images.')
+      })
+      .finally(() => {
+        if (!cancelled) setAssetsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId, storeStatus, assetsNonce])
+
+  const refreshAssets = useCallback(() => setAssetsNonce((n) => n + 1), [])
+
+  const uploadAsset = useCallback(
+    async (file) => {
+      if (!storeId || assetUploading) return
+      setAssetUploading(true)
+      setAssetsError('')
+      try {
+        const created = await uploadStoreAsset(storeId, { file })
+        setAssets((current) => [created, ...current.filter((row) => row.id !== created.id)])
+        return created
+      } catch (error) {
+        const message = error instanceof ApiError ? error.message : 'Unable to upload image.'
+        setAssetsError(message)
+        throw error instanceof ApiError ? error : new Error(message)
+      } finally {
+        setAssetUploading(false)
+      }
+    },
+    [storeId, assetUploading],
+  )
+
+  useEffect(() => {
+    if (!readyForLivePreview || !storeId) return undefined
+
+    const requestId = ++previewRequestId.current
+    const timer = window.setTimeout(() => {
+      setPreviewLoading(true)
+      setPreviewError('')
+      const personalized = personalizeEmailDocument(document, {
+        shopName,
+        firstName: 'Alex',
+        discountCode: 'SAVE20',
+      })
+      previewEmailDocument(storeId, personalized)
+        .then((result) => {
+          if (previewRequestId.current !== requestId) return
+          setPreviewHtml(result.html)
+        })
+        .catch((error) => {
+          if (previewRequestId.current !== requestId) return
+          setPreviewError(error instanceof ApiError ? error.message : 'Unable to preview.')
+          if (error instanceof ApiError && error.errors?.document) {
+            setFieldErrors((current) => ({
+              ...current,
+              document: firstFieldError(error.errors, 'document'),
+            }))
+          }
+        })
+        .finally(() => {
+          if (previewRequestId.current === requestId) setPreviewLoading(false)
+        })
+    }, 450)
+
+    return () => window.clearTimeout(timer)
+  }, [document, readyForLivePreview, shopName, storeId])
+
   const runPreview = async () => {
     if (!storeId || previewLoading) return
+    const requestId = ++previewRequestId.current
     setPreviewLoading(true)
     setPreviewError('')
     try {
-      const result = await previewEmailDocument(storeId, document)
-      setPreviewHtml(result.html)
+      const personalized = personalizeEmailDocument(document, {
+        shopName,
+        firstName: 'Alex',
+        discountCode: 'SAVE20',
+      })
+      const result = await previewEmailDocument(storeId, personalized)
+      if (previewRequestId.current === requestId) setPreviewHtml(result.html)
     } catch (error) {
+      if (previewRequestId.current !== requestId) return
       setPreviewError(error instanceof ApiError ? error.message : 'Unable to preview.')
       if (error instanceof ApiError && error.errors?.document) {
         setFieldErrors({ document: firstFieldError(error.errors, 'document') })
       }
     } finally {
-      setPreviewLoading(false)
+      if (previewRequestId.current === requestId) setPreviewLoading(false)
     }
   }
 
   const save = async () => {
-    if (!templateId || saving) return
+    if (!templateId || saving) return null
     if (!name.trim()) {
       setFieldErrors({ name: 'Name is required.' })
-      return
+      return null
     }
     setSaving(true)
     setActionError('')
@@ -122,6 +224,9 @@ export function EmailTemplateEditorPage() {
       })
       setPreviewHtml(updated.html || '')
       setDocument(updated.document || document)
+      setSavedFlash(true)
+      window.setTimeout(() => setSavedFlash(false), 1800)
+      return updated
     } catch (error) {
       if (error instanceof ApiError) {
         setActionError(error.message)
@@ -132,23 +237,70 @@ export function EmailTemplateEditorPage() {
       } else {
         setActionError('Unable to save the template.')
       }
+      return null
     } finally {
       setSaving(false)
     }
   }
 
-  const remove = async () => {
-    if (!templateId || deleting) return
-    if (!window.confirm('Delete this template? Campaigns that already applied it keep their snapshot.')) {
+  const useInCampaign = async () => {
+    if (!templateId || usingInCampaign || !pickingForCampaign) return
+    if (!name.trim()) {
+      setFieldErrors({ name: 'Name is required.' })
       return
     }
+    setUsingInCampaign(true)
+    setActionError('')
+    setFieldErrors({})
+    try {
+      await updateEmailTemplate(templateId, {
+        name: name.trim(),
+        category,
+        status: status === 'draft' ? 'published' : status,
+        document,
+      })
+      const returned = await finishCampaignTemplatePick({
+        templateId,
+        navigate,
+        applyFn: applyCampaignTemplate,
+      })
+      if (!returned) {
+        setActionError(
+          'Campaign pick context expired. Open Browse my templates from the campaign again.',
+        )
+      }
+    } catch (error) {
+      setActionError(
+        error instanceof ApiError ? error.message : 'Unable to use this template in the campaign.',
+      )
+    } finally {
+      setUsingInCampaign(false)
+    }
+  }
+
+  const closeStudio = () => {
+    if (pickingForCampaign) {
+      const returnTo = pickContext?.returnTo
+      clearCampaignTemplatePick()
+      if (returnTo) {
+        navigate(returnTo)
+        return
+      }
+    }
+    navigate('/resources/templates')
+  }
+
+  const remove = async () => {
+    if (!templateId || deleting) return
     setDeleting(true)
     setActionError('')
     try {
       await deleteEmailTemplate(templateId)
       navigate('/resources/templates')
     } catch (error) {
-      setActionError(error instanceof ApiError ? error.message : 'Unable to delete.')
+      const message = error instanceof ApiError ? error.message : 'Unable to delete.'
+      setActionError(message)
+      throw error instanceof Error ? error : new Error(message)
     } finally {
       setDeleting(false)
     }
@@ -195,87 +347,48 @@ export function EmailTemplateEditorPage() {
   }
 
   return (
-    <div>
-      <div className="mb-3">
-        <Link
-          to="/resources/templates"
-          className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
-        >
-          <ArrowLeft className="size-4" />
-          Templates
-        </Link>
-      </div>
-
-      <PageHeader
-        title="Edit email template"
-        description="Block JSON is the source of truth. HTML is sanitized and stored as a snapshot."
-        actions={
-          <>
-            <Badge tone={status === 'published' ? 'success' : 'warning'}>{status}</Badge>
-            <Button variant="secondary" disabled={previewLoading} onClick={runPreview}>
-              {previewLoading ? 'Previewing…' : 'Refresh preview'}
-            </Button>
-            <Button variant="danger" disabled={deleting} onClick={remove}>
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
-            <Button disabled={saving} onClick={save}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </>
-        }
+    <>
+      <EmailTemplateStudio
+        name={name}
+        onNameChange={setName}
+        status={status}
+        onStatusChange={setStatus}
+        category={category}
+        onCategoryChange={setCategory}
+        document={document}
+        onDocumentChange={setDocument}
+        previewHtml={previewHtml}
+        previewLoading={previewLoading}
+        previewError={previewError}
+        shopName={shopName}
+        assets={assets}
+        assetsLoading={assetsLoading}
+        assetsError={assetsError}
+        assetUploading={assetUploading}
+        saving={saving}
+        savedFlash={savedFlash}
+        pickingForCampaign={pickingForCampaign}
+        usingInCampaign={usingInCampaign}
+        onClose={closeStudio}
+        onSave={save}
+        onUseInCampaign={useInCampaign}
+        onRefreshPreview={runPreview}
+        onUploadAsset={uploadAsset}
+        onRefreshAssets={refreshAssets}
+        onDelete={pickingForCampaign ? undefined : () => setConfirmDelete(true)}
+        nameError={fieldErrors.name}
+        actionError={actionError || fieldErrors.document || previewError}
       />
 
-      {actionError ? (
-        <p className="mb-3 text-sm text-danger" role="alert">
-          {actionError}
-        </p>
-      ) : null}
-      {fieldErrors.document ? (
-        <p className="mb-3 text-sm text-danger" role="alert">
-          {fieldErrors.document}
-        </p>
-      ) : null}
-
-      <div className="mb-4 grid gap-3 lg:grid-cols-3">
-        <Card className="space-y-3 lg:col-span-2">
-          <FormField label="Name" error={fieldErrors.name}>
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
-          </FormField>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormField label="Category">
-              <Input value={category} onChange={(event) => setCategory(event.target.value)} />
-            </FormField>
-            <FormField label="Status">
-              <Select value={status} onChange={(event) => setStatus(event.target.value)}>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </Select>
-            </FormField>
-          </div>
-        </Card>
-        <Card className="space-y-2">
-          <p className="text-sm font-semibold text-ink">Images</p>
-          <p className="text-sm text-muted">
-            Upload images in the library, then pick them in image blocks.
-          </p>
-          <Button variant="secondary" onClick={() => navigate('/resources/images')}>
-            Open image library
-          </Button>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <EmailBlockEditor document={document} onChange={setDocument} assets={assets} />
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-ink">Preview</p>
-          {previewError ? (
-            <p className="text-sm text-danger" role="alert">
-              {previewError}
-            </p>
-          ) : null}
-          <EmailHtmlPreview html={previewHtml} className="min-h-[640px]" />
-        </div>
-      </div>
-    </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this template?"
+        description="Campaigns that already applied it keep their snapshot."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={remove}
+      />
+    </>
   )
 }

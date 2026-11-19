@@ -1,335 +1,240 @@
-import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Monitor, Smartphone } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  PageHeader,
-  Button,
-  Card,
-  Badge,
-  FormField,
-  Input,
-  Textarea,
-  Select,
-  Tabs,
   EmptyState,
+  LoadingState,
+  ErrorState,
+  ConfirmDialog,
 } from '../../components/ui'
-import { getFormById } from '../../mock'
-import { statusLabel, statusTone } from '../../lib/format'
-import { cn } from '../../lib/cn'
+import { FormStudio } from '../../components/forms/studio/FormStudio'
+import { ApiError } from '../../lib/api'
+import {
+  createStoreForm,
+  defaultFormDefinition,
+  deleteForm,
+  getForm,
+  toFormDefinitionPayload,
+  toFormEditorState,
+  updateForm,
+} from '../../lib/formsApi'
+import { firstFieldError } from '../../lib/tagsUi'
+import { useActiveStore } from '../../store/useActiveStore'
 
-const fieldPalette = [
-  { type: 'email', label: 'Email' },
-  { type: 'phone', label: 'Phone number' },
-  { type: 'consent', label: 'Legal consent' },
-  { type: 'text', label: 'Text input' },
-]
+const FORM_TYPES = ['popup', 'embedded', 'landing_page', 'flyout', 'fullscreen']
 
-function createBlank(type) {
-  return {
-    id: 'form_new',
-    name: type === 'embedded' ? 'New embedded form' : 'New popup form',
-    type: type || 'popup',
-    status: 'draft',
-    submissions: 0,
-    conversionRate: 0,
-    headline: 'GET 10% OFF YOUR FIRST ORDER',
-    subheadline: 'Join for drops, offers, and early access.',
-    buttonLabel: 'Subscribe',
-    fields: [
-      { id: 'f_email', type: 'email', label: 'Email', required: true },
-      { id: 'f_consent', type: 'consent', label: 'I agree to receive marketing emails', required: true },
-    ],
-    theme: {
-      accent: '#2878FF',
-      background: '#FFFFFF',
-      text: '#10131C',
-    },
-    behavior: {
-      display: 'After 8 seconds',
-      devices: 'Desktop & mobile',
-      frequency: 'Once every 14 days',
-    },
+function normalizeFormType(type) {
+  return FORM_TYPES.includes(type) ? type : 'popup'
+}
+
+function blankEditor(type) {
+  const definition = defaultFormDefinition()
+  const resolved = normalizeFormType(type)
+  if (resolved === 'embedded' || resolved === 'landing_page') {
+    definition.behavior = {
+      ...definition.behavior,
+      display: 'Always visible',
+      devices: 'Show on all devices',
+      frequency: 'N/A',
+    }
   }
+  const names = {
+    popup: 'New popup form',
+    embedded: 'New embedded form',
+    landing_page: 'New landing page form',
+    flyout: 'New flyout form',
+    fullscreen: 'New fullscreen form',
+  }
+  return toFormEditorState({
+    id: null,
+    name: names[resolved] || 'New form',
+    type: resolved,
+    status: 'draft',
+    submissions_count: 0,
+    public_token: null,
+    embed_url: null,
+    definition,
+  })
 }
 
 export function FormEditorPage() {
   const { formId } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const existing = formId && formId !== 'new' ? getFormById(formId) : null
-  const [form, setForm] = useState(() => existing || createBlank(searchParams.get('type')))
-  const [device, setDevice] = useState('desktop')
-  const [panel, setPanel] = useState('content')
+  const { activeStore, status: storeStatus } = useActiveStore()
+  const storeId = activeStore?.id
+  const isNew = !formId || formId === 'new'
 
-  if (formId && formId !== 'new' && !existing) {
+  const [form, setForm] = useState(() => blankEditor(searchParams.get('type')))
+  const [loading, setLoading] = useState(!isNew)
+  const [loadError, setLoadError] = useState('')
+  const [notFound, setNotFound] = useState(false)
+  const [loadNonce, setLoadNonce] = useState(0)
+
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [savedFlash, setSavedFlash] = useState(false)
+
+  useEffect(() => {
+    if (isNew || storeStatus === 'loading' || !storeId) return undefined
+
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
+    setNotFound(false)
+
+    getForm(formId)
+      .then((resource) => {
+        if (cancelled) return
+        setForm(toFormEditorState(resource))
+        setLoading(false)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setLoading(false)
+        if (error instanceof ApiError && error.status === 404) {
+          setNotFound(true)
+          return
+        }
+        setLoadError(error instanceof ApiError ? error.message : 'Unable to load form.')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [formId, isNew, storeId, storeStatus, loadNonce])
+
+  const persist = async ({ status, closeAfter = false } = {}) => {
+    if (!storeId || saving) return null
+    if (!form.name.trim()) {
+      setFieldErrors({ name: 'Name is required.' })
+      return null
+    }
+    setSaving(true)
+    setActionError('')
+    setFieldErrors({})
+    const payload = {
+      name: form.name.trim(),
+      type: form.type,
+      status: status || form.status,
+      definition: toFormDefinitionPayload(form),
+    }
+    try {
+      let resource
+      if (isNew || !form.id) {
+        resource = await createStoreForm(storeId, payload)
+        navigate(`/forms/${resource.id}`, { replace: true })
+      } else {
+        resource = await updateForm(form.id, payload)
+      }
+      setForm(toFormEditorState(resource))
+      setSavedFlash(true)
+      window.setTimeout(() => setSavedFlash(false), 1400)
+      if (closeAfter) navigate('/forms')
+      return resource
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setActionError(error.message)
+        setFieldErrors({
+          name: firstFieldError(error.errors, 'name') || undefined,
+          definition: firstFieldError(error.errors, 'definition') || undefined,
+        })
+      } else {
+        setActionError('Unable to save the form.')
+      }
+      return null
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleEnabled = async () => {
+    const next = form.status === 'enabled' ? 'draft' : 'enabled'
+    await persist({ status: next })
+  }
+
+  const remove = async () => {
+    if (!form.id || deleting) return
+    setDeleting(true)
+    setActionError('')
+    try {
+      await deleteForm(form.id)
+      navigate('/forms')
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Unable to delete.'
+      setActionError(message)
+      throw error instanceof Error ? error : new Error(message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (storeStatus === 'loading') {
+    return <LoadingState label="Loading store…" />
+  }
+
+  if (!storeId) {
+    return (
+      <EmptyState
+        title="Select a store"
+        description="Forms are scoped to a store."
+        actionLabel="Go to Store settings"
+        onAction={() => navigate('/settings/store')}
+      />
+    )
+  }
+
+  if (notFound) {
     return (
       <EmptyState
         title="Form not found"
-        description="This form ID is not in the mock dataset."
+        description="This form does not exist or is no longer available."
         actionLabel="Back to forms"
         onAction={() => navigate('/forms')}
       />
     )
   }
 
-  const previewWidth = device === 'mobile' ? 'max-w-sm' : 'max-w-lg'
+  if (loading) {
+    return <LoadingState label="Loading form…" />
+  }
 
-  const addField = (type) => {
-    setForm((current) => ({
-      ...current,
-      fields: [
-        ...current.fields,
-        {
-          id: `f_${Date.now()}`,
-          type,
-          label: type === 'consent' ? 'I agree to receive updates' : type[0].toUpperCase() + type.slice(1),
-          required: type === 'consent',
-        },
-      ],
-    }))
+  if (loadError) {
+    return (
+      <ErrorState
+        title="Unable to load form"
+        description={loadError}
+        onRetry={() => setLoadNonce((n) => n + 1)}
+      />
+    )
   }
 
   return (
-    <div>
-      <div className="mb-3">
-        <Link to="/forms" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-          <ArrowLeft className="size-4" />
-          Forms
-        </Link>
-      </div>
-
-      <PageHeader
-        title={form.name}
-        description="Visual form editor prototype with live preview updates."
-        actions={
-          <>
-            <Badge tone={statusTone(form.status)}>{statusLabel(form.status)}</Badge>
-            <div className="flex overflow-hidden rounded-md border border-line">
-              <button
-                type="button"
-                className={cn(
-                  'px-2.5 py-1.5 text-muted hover:text-ink',
-                  device === 'desktop' && 'bg-secondary text-ink',
-                )}
-                aria-label="Desktop preview"
-                onClick={() => setDevice('desktop')}
-              >
-                <Monitor className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'px-2.5 py-1.5 text-muted hover:text-ink',
-                  device === 'mobile' && 'bg-secondary text-ink',
-                )}
-                aria-label="Mobile preview"
-                onClick={() => setDevice('mobile')}
-              >
-                <Smartphone className="size-4" />
-              </button>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setForm((current) => ({
-                  ...current,
-                  status: current.status === 'enabled' ? 'draft' : 'enabled',
-                }))
-              }}
-            >
-              {form.status === 'enabled' ? 'Disable' : 'Enable form'}
-            </Button>
-            <Button onClick={() => alert('Prototype only — form not persisted.')}>Save</Button>
-          </>
-        }
+    <>
+      <FormStudio
+        form={form}
+        onFormChange={setForm}
+        saving={saving}
+        savedFlash={savedFlash}
+        actionError={actionError || fieldErrors.definition || ''}
+        nameError={fieldErrors.name || ''}
+        onClose={() => navigate('/forms')}
+        onSave={() => persist()}
+        onSaveAndClose={() => persist({ closeAfter: true })}
+        onEnable={toggleEnabled}
       />
 
-      <div className="grid gap-3 xl:grid-cols-[16rem_1fr_18rem]">
-        <Card>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Items</h3>
-          <div className="space-y-2">
-            {fieldPalette.map((item) => (
-              <button
-                key={item.type}
-                type="button"
-                className="flex w-full rounded-md border border-line bg-midnight px-3 py-2 text-left text-sm text-ink hover:border-electric"
-                onClick={() => addField(item.type)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="flex min-h-[28rem] items-center justify-center bg-secondary/40">
-          <div
-            className={cn('w-full rounded-xl border border-line p-5 shadow-lg', previewWidth)}
-            style={{ background: form.theme.background, color: form.theme.text }}
-          >
-            <h2 className="text-xl font-bold tracking-tight">{form.headline}</h2>
-            <p className="mt-2 text-sm opacity-80">{form.subheadline}</p>
-            <div className="mt-4 space-y-3">
-              {form.fields.map((field) =>
-                field.type === 'consent' ? (
-                  <label key={field.id} className="flex items-start gap-2 text-xs opacity-90">
-                    <input type="checkbox" className="mt-0.5" readOnly />
-                    <span>{field.label}</span>
-                  </label>
-                ) : (
-                  <input
-                    key={field.id}
-                    readOnly
-                    placeholder={field.label}
-                    className="h-10 w-full rounded-md border border-black/10 px-3 text-sm"
-                    style={{ background: '#fff', color: '#10131C' }}
-                  />
-                ),
-              )}
-              <button
-                type="button"
-                className="h-10 w-full rounded-md text-sm font-semibold text-white"
-                style={{ background: form.theme.accent }}
-              >
-                {form.buttonLabel}
-              </button>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <Tabs
-            className="mb-3 w-full"
-            value={panel}
-            onChange={setPanel}
-            items={[
-              { value: 'content', label: 'Content' },
-              { value: 'theme', label: 'Theme' },
-              { value: 'behavior', label: 'Behavior' },
-            ]}
-          />
-
-          {panel === 'content' && (
-            <div className="space-y-3">
-              <FormField label="Form name">
-                <Input
-                  value={form.name}
-                  onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
-                />
-              </FormField>
-              <FormField label="Headline">
-                <Input
-                  value={form.headline}
-                  onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
-                />
-              </FormField>
-              <FormField label="Subheadline">
-                <Textarea
-                  value={form.subheadline}
-                  onChange={(event) =>
-                    setForm((value) => ({ ...value, subheadline: event.target.value }))
-                  }
-                />
-              </FormField>
-              <FormField label="Button label">
-                <Input
-                  value={form.buttonLabel}
-                  onChange={(event) =>
-                    setForm((value) => ({ ...value, buttonLabel: event.target.value }))
-                  }
-                />
-              </FormField>
-            </div>
-          )}
-
-          {panel === 'theme' && (
-            <div className="space-y-3">
-              <FormField label="Accent">
-                <Input
-                  value={form.theme.accent}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      theme: { ...value.theme, accent: event.target.value },
-                    }))
-                  }
-                />
-              </FormField>
-              <FormField label="Background">
-                <Input
-                  value={form.theme.background}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      theme: { ...value.theme, background: event.target.value },
-                    }))
-                  }
-                />
-              </FormField>
-              <FormField label="Text">
-                <Input
-                  value={form.theme.text}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      theme: { ...value.theme, text: event.target.value },
-                    }))
-                  }
-                />
-              </FormField>
-            </div>
-          )}
-
-          {panel === 'behavior' && (
-            <div className="space-y-3">
-              <FormField label="Display">
-                <Select
-                  value={form.behavior.display}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      behavior: { ...value.behavior, display: event.target.value },
-                    }))
-                  }
-                >
-                  <option>After 8 seconds</option>
-                  <option>On exit intent</option>
-                  <option>Always visible</option>
-                </Select>
-              </FormField>
-              <FormField label="Devices">
-                <Select
-                  value={form.behavior.devices}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      behavior: { ...value.behavior, devices: event.target.value },
-                    }))
-                  }
-                >
-                  <option>Desktop & mobile</option>
-                  <option>Desktop only</option>
-                  <option>Mobile only</option>
-                </Select>
-              </FormField>
-              <FormField label="Frequency">
-                <Select
-                  value={form.behavior.frequency}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      behavior: { ...value.behavior, frequency: event.target.value },
-                    }))
-                  }
-                >
-                  <option>Once every 14 days</option>
-                  <option>Once per session</option>
-                  <option>N/A</option>
-                </Select>
-              </FormField>
-            </div>
-          )}
-        </Card>
-      </div>
-    </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this form?"
+        description="This cannot be undone from the UI."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={remove}
+      />
+    </>
   )
 }

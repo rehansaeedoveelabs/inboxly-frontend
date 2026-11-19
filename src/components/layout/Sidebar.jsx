@@ -23,10 +23,11 @@ export function Sidebar({
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r border-line bg-elevated transition-all duration-200',
-          'lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh shrink-0 flex-col border-r border-line bg-elevated transition-all duration-200',
+          // Desktop: stay in the shell row and remain viewport-tall (does not scroll with content).
+          'lg:sticky lg:top-0 lg:z-30 lg:translate-x-0',
           collapsed ? 'lg:w-[4.5rem]' : 'lg:w-64',
-          mobileOpen ? 'w-72 translate-x-0' : 'w-72 -translate-x-full',
+          mobileOpen ? 'w-72 translate-x-0' : 'w-72 -translate-x-full lg:translate-x-0',
         )}
         aria-label="Primary"
       >

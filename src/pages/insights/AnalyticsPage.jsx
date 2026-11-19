@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   PageHeader,
@@ -9,15 +9,14 @@ import {
   Table,
   Badge,
   Card,
+  LoadingState,
+  EmptyState,
+  ErrorState,
 } from '../../components/ui'
-import {
-  getAnalyticsOverview,
-  getAudienceGrowthSeries,
-  getAutomationReportRows,
-  getCampaignReportRows,
-  getChannelPerformance,
-} from '../../mock'
-import { formatCurrency, formatNumber, statusLabel, statusTone } from '../../lib/format'
+import { ApiError } from '../../lib/api'
+import { getStoreInsightsOverview } from '../../lib/insightsApi'
+import { formatNumber, statusLabel, statusTone } from '../../lib/format'
+import { useActiveStore } from '../../store/useActiveStore'
 import { useTheme } from '../../theme/useTheme'
 import { getChartThemeColors } from '../../theme/theme'
 import {
@@ -33,13 +32,72 @@ import {
 } from 'recharts'
 
 export function AnalyticsPage() {
+  const { activeStore, status: storeStatus } = useActiveStore()
+  const storeId = activeStore?.id
   const [range, setRange] = useState('30d')
   const [reportTab, setReportTab] = useState('campaigns')
   const { resolved } = useTheme()
   const chart = getChartThemeColors()
-  const overview = getAnalyticsOverview()
-  const growth = getAudienceGrowthSeries()
-  const channels = getChannelPerformance()
+
+  const [overview, setOverview] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    if (!storeId) {
+      setOverview(null)
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      setOverview(await getStoreInsightsOverview(storeId))
+    } catch (err) {
+      setOverview(null)
+      setError(err instanceof ApiError ? err.message : 'Unable to load analytics.')
+    } finally {
+      setLoading(false)
+    }
+  }, [storeId])
+
+  useEffect(() => {
+    if (storeStatus === 'loading') return
+    load()
+  }, [storeStatus, load])
+
+  if (storeStatus === 'loading' || loading) {
+    return <LoadingState label="Loading analytics…" />
+  }
+
+  if (!storeId) {
+    return (
+      <EmptyState
+        title="Select a store"
+        description="Analytics are scoped to the active store."
+      />
+    )
+  }
+
+  if (error) {
+    return (
+      <ErrorState title="Unable to load analytics" description={error} onRetry={load} />
+    )
+  }
+
+  const campaigns = overview?.campaigns || {}
+  const automations = overview?.automations || {}
+  const series = (overview?.audience_series || []).map((row) => ({
+    label: row.label,
+    contacts: row.contacts,
+    email: row.email,
+    sms: row.sms,
+  }))
+  const channelBars = [
+    { channel: 'Email', subscribers: overview?.email_subscribers || 0 },
+    { channel: 'SMS', subscribers: overview?.sms_subscribers || 0 },
+  ]
+  const recentCampaigns = overview?.recent_campaigns || []
+  const recentAutomations = overview?.recent_automations || []
 
   const campaignColumns = [
     {
@@ -56,10 +114,11 @@ export function AnalyticsPage() {
       label: 'Channel',
       render: (row) => <Badge tone="info">{row.channel}</Badge>,
     },
-    { key: 'sent', label: 'Sent', render: (row) => formatNumber(row.sent) },
-    { key: 'opens', label: 'Opens', render: (row) => formatNumber(row.opens) },
-    { key: 'clicks', label: 'Clicks', render: (row) => formatNumber(row.clicks) },
-    { key: 'revenue', label: 'Revenue', render: (row) => formatCurrency(row.revenue) },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => <Badge tone={statusTone(row.status)}>{statusLabel(row.status)}</Badge>,
+    },
   ]
 
   const automationColumns = [
@@ -72,9 +131,11 @@ export function AnalyticsPage() {
         </Link>
       ),
     },
-    { key: 'enrolled', label: 'Enrolled', render: (row) => formatNumber(row.enrolled) },
-    { key: 'completed', label: 'Completed', render: (row) => formatNumber(row.completed) },
-    { key: 'revenue', label: 'Revenue', render: (row) => formatCurrency(row.revenue) },
+    {
+      key: 'enrollments_count',
+      label: 'Enrolled',
+      render: (row) => formatNumber(row.enrollments_count || 0),
+    },
     {
       key: 'status',
       label: 'Status',
@@ -86,25 +147,27 @@ export function AnalyticsPage() {
     <div>
       <PageHeader
         title="Analytics"
-        description="Detailed revenue/open reports remain mock. Live audience and campaign counts are on the Dashboard."
-        actions={
-          <DateRangeSelector value={range} onChange={setRange} className="w-40" />
-        }
+        description={`Live audience and campaign metrics for ${activeStore.name}. Revenue attribution is not available yet.`}
+        actions={<DateRangeSelector value={range} onChange={setRange} className="w-40" />}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCard label="Campaign revenue" value={formatCurrency(overview.campaignRevenue)} hint="Attributed sends" />
-        <MetricCard label="Automation revenue" value={formatCurrency(overview.automationRevenue)} hint="Workflow attributed" />
-        <MetricCard label="Email open rate" value={`${overview.emailOpenRate}%`} hint="Across sent campaigns" />
-        <MetricCard label="SMS click rate" value={`${overview.smsClickRate}%`} hint="Tracked SMS links" />
-        <MetricCard label="New subscribers" value={formatNumber(overview.newSubscribers)} hint="Net growth in range" />
-        <MetricCard label="Unsubscribes" value={formatNumber(overview.unsubscribes)} hint="Email + SMS" />
+        <MetricCard label="Contacts" value={formatNumber(overview?.contacts_total || 0)} hint="Store audience" />
+        <MetricCard label="Email subscribers" value={formatNumber(overview?.email_subscribers || 0)} hint="Subscribed consent" />
+        <MetricCard label="SMS subscribers" value={formatNumber(overview?.sms_subscribers || 0)} hint="Subscribed consent" />
+        <MetricCard label="Campaigns sent" value={formatNumber(campaigns.sent || 0)} hint={`${campaigns.total || 0} total`} />
+        <MetricCard label="Active automations" value={formatNumber(automations.active || 0)} hint={`${automations.total || 0} total`} />
+        <MetricCard
+          label="Automation enrollments"
+          value={formatNumber(automations.enrollments_total || 0)}
+          hint="All time"
+        />
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
-        <ChartContainer title="Audience growth">
+        <ChartContainer title="Audience growth (weekly)">
           <ResponsiveContainer width="100%" height="100%" key={`growth-${resolved}`}>
-            <LineChart data={growth}>
+            <LineChart data={series}>
               <CartesianGrid stroke={chart.grid} vertical={false} />
               <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
@@ -116,15 +179,16 @@ export function AnalyticsPage() {
                   color: chart.tooltipText,
                 }}
               />
-              <Line type="monotone" dataKey="subscribed" stroke={chart.electric} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="unsubscribed" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="contacts" stroke={chart.electric} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="email" stroke={chart.cantaloupe} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="sms" stroke={chart.axis} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
 
-        <ChartContainer title="Channel performance (revenue)">
+        <ChartContainer title="Subscribers by channel">
           <ResponsiveContainer width="100%" height="100%" key={`channel-${resolved}`}>
-            <BarChart data={channels}>
+            <BarChart data={channelBars}>
               <CartesianGrid stroke={chart.grid} vertical={false} />
               <XAxis dataKey="channel" stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke={chart.axis} fontSize={12} tickLine={false} axisLine={false} />
@@ -136,7 +200,7 @@ export function AnalyticsPage() {
                   color: chart.tooltipText,
                 }}
               />
-              <Bar dataKey="revenue" fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="subscribers" fill={chart.electric} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         </ChartContainer>
@@ -144,35 +208,21 @@ export function AnalyticsPage() {
 
       <Card className="mt-4" padding={false}>
         <div className="flex flex-col gap-3 border-b border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-sm font-semibold text-ink">Reports</h3>
+          <h3 className="text-sm font-semibold text-ink">Recent activity</h3>
           <Tabs
             value={reportTab}
             onChange={setReportTab}
             items={[
               { value: 'campaigns', label: 'Campaigns' },
               { value: 'automations', label: 'Automations' },
-              { value: 'channels', label: 'Channels' },
             ]}
           />
         </div>
         <div className="p-4">
-          {reportTab === 'campaigns' && (
-            <Table columns={campaignColumns} rows={getCampaignReportRows()} />
-          )}
-          {reportTab === 'automations' && (
-            <Table columns={automationColumns} rows={getAutomationReportRows()} />
-          )}
-          {reportTab === 'channels' && (
-            <Table
-              columns={[
-                { key: 'channel', label: 'Channel' },
-                { key: 'sent', label: 'Sent', render: (row) => formatNumber(row.sent) },
-                { key: 'opens', label: 'Opens', render: (row) => formatNumber(row.opens) },
-                { key: 'clicks', label: 'Clicks', render: (row) => formatNumber(row.clicks) },
-                { key: 'revenue', label: 'Revenue', render: (row) => formatCurrency(row.revenue) },
-              ]}
-              rows={channels}
-            />
+          {reportTab === 'campaigns' ? (
+            <Table columns={campaignColumns} rows={recentCampaigns} />
+          ) : (
+            <Table columns={automationColumns} rows={recentAutomations} />
           )}
         </div>
       </Card>

@@ -15,6 +15,7 @@ import {
   LoadingState,
   ErrorState,
 } from '../../components/ui'
+import { AssetThumbnail } from '../../components/assets/AssetThumbnail'
 import { ApiError } from '../../lib/api'
 import {
   deleteAsset,
@@ -25,6 +26,7 @@ import {
   validateAssetFile,
 } from '../../lib/assetsApi'
 import { formatDateTime } from '../../lib/format'
+import { cn } from '../../lib/cn'
 import { useActiveStore } from '../../store/useActiveStore'
 
 const PAGE_LIMIT = 25
@@ -209,7 +211,7 @@ export function ImageLibraryPage() {
     <div>
       <PageHeader
         title="Image library"
-        description="Upload images for email templates. Files are stored privately per store."
+        description={`Private images for ${activeStore?.name || 'your store'} — use them in email templates.`}
         actions={
           <Button onClick={() => setUploadOpen(true)}>
             <Upload className="size-4" />
@@ -224,12 +226,17 @@ export function ImageLibraryPage() {
         </p>
       ) : null}
 
-      <div className="mb-3 max-w-md">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput
+          className="w-full sm:max-w-md"
           placeholder="Search images"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <p className="text-sm text-muted">
+          {assets.length} {assets.length === 1 ? 'image' : 'images'}
+          {nextCursor ? ' · more available' : ''}
+        </p>
       </div>
 
       {listLoading ? (
@@ -246,17 +253,25 @@ export function ImageLibraryPage() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {assets.map((asset) => (
               <button
                 key={asset.id}
                 type="button"
                 onClick={() => setSelectedId(asset.id)}
-                className="overflow-hidden rounded-lg border border-line bg-elevated text-left hover:border-electric"
+                className={cn(
+                  'overflow-hidden rounded-xl border bg-elevated text-left transition',
+                  selectedId === asset.id
+                    ? 'border-electric ring-1 ring-electric/30'
+                    : 'border-line hover:border-electric/50',
+                )}
               >
-                <div className="flex h-36 items-center justify-center bg-midnight text-sm font-semibold text-muted">
-                  {(asset.name || 'image').slice(0, 18)}
-                </div>
+                <AssetThumbnail
+                  assetId={asset.id}
+                  alt={asset.alt || asset.name}
+                  className="h-40 w-full"
+                  imgClassName="h-full w-full object-cover"
+                />
                 <div className="space-y-1 p-3">
                   <p className="truncate text-sm font-medium text-ink">{asset.name}</p>
                   <p className="text-xs text-muted">{formatAssetMeta(asset)}</p>

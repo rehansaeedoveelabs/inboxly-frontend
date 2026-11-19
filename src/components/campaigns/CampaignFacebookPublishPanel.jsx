@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, ConfirmDialog, FormField, Input, Textarea } from '../ui'
 import { ApiError } from '../../lib/api'
@@ -13,8 +13,14 @@ import {
   retryCampaignMetaPublication,
   updateCampaignSocialContent,
 } from '../../lib/campaignMetaApi'
-import { defaultSelectedPageIds, publicationStatusTone } from '../../lib/campaignMetaUi'
+import {
+  defaultSelectedPageIds,
+  isPublicationInFlight,
+  publicationStatusTone,
+} from '../../lib/campaignMetaUi'
 import { formatDateTime } from '../../lib/format'
+
+const PUBLICATION_POLL_MS = 2000
 
 /**
  * Side-channel Facebook publishing for a campaign (independent of email send).
@@ -33,6 +39,7 @@ export function CampaignFacebookPublishPanel({ campaign, onCampaignUpdated }) {
   const [confirmRepublish, setConfirmRepublish] = useState(false)
   const [resolveState, setResolveState] = useState(null)
   const [resolvePostId, setResolvePostId] = useState('')
+  const pollInFlight = useRef(false)
 
   const load = useCallback(async () => {
     if (!campaign?.id) return
@@ -53,6 +60,34 @@ export function CampaignFacebookPublishPanel({ campaign, onCampaignUpdated }) {
     }
   }, [campaign?.id])
 
+  const refreshPublications = useCallback(async () => {
+    if (!campaign?.id || pollInFlight.current) return
+    pollInFlight.current = true
+    try {
+      const pubs = await listCampaignMetaPublications(campaign.id)
+      setPublications(pubs)
+      if (pubs.some((row) => row.status === 'published')) {
+        setNotice((current) =>
+          current === 'Facebook publication queued.' || current === 'Publishing to Facebook…'
+            ? 'Facebook publication published.'
+            : current,
+        )
+      } else if (pubs.some((row) => row.status === 'failed') && !pubs.some(isPublicationInFlight)) {
+        setNotice('')
+      } else if (pubs.some(isPublicationInFlight)) {
+        setNotice((current) =>
+          current === 'Facebook publication queued.' || current === 'Publishing to Facebook…'
+            ? 'Publishing to Facebook…'
+            : current,
+        )
+      }
+    } catch {
+      // Keep prior status on transient poll errors.
+    } finally {
+      pollInFlight.current = false
+    }
+  }, [campaign?.id])
+
   useEffect(() => {
     setMessage(campaign?.meta_message || '')
     setLink(campaign?.meta_link || '')
@@ -61,6 +96,28 @@ export function CampaignFacebookPublishPanel({ campaign, onCampaignUpdated }) {
   useEffect(() => {
     load()
   }, [load])
+
+  const hasInFlightPublications = useMemo(
+    () => publications.some(isPublicationInFlight),
+    [publications],
+  )
+
+  useEffect(() => {
+    if (!campaign?.id || !hasInFlightPublications) return undefined
+
+    let cancelled = false
+    const tick = async () => {
+      if (cancelled) return
+      await refreshPublications()
+    }
+
+    tick()
+    const interval = window.setInterval(tick, PUBLICATION_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [campaign?.id, hasInFlightPublications, refreshPublications])
 
   const previewLink = useMemo(() => {
     if (!link.trim() || !campaign?.id) return ''

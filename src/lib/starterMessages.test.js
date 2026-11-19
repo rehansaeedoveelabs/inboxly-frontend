@@ -11,12 +11,12 @@ import {
 } from './starterMessages.js'
 
 describe('starterMessages', () => {
-  it('includes 7 email and 5 SMS presets across all categories', () => {
+  it('includes email and expanded SMS presets across all categories', () => {
     const email = startersForChannel('email')
     const sms = startersForChannel('sms')
     assert.equal(email.length, 7)
-    assert.equal(sms.length, 5)
-    assert.equal(STARTER_MESSAGES.length, 12)
+    assert.ok(sms.length >= 10)
+    assert.equal(STARTER_MESSAGES.length, email.length + sms.length)
     assert.equal(STARTER_CATEGORIES.length, 5)
 
     for (const category of STARTER_CATEGORIES) {
@@ -33,7 +33,7 @@ describe('starterMessages', () => {
     assert.equal(email.every((item) => item.channel === 'email'), true)
     assert.equal(sms.every((item) => item.channel === 'sms'), true)
     assert.equal(email.length, 7)
-    assert.equal(sms.length, 5)
+    assert.ok(sms.length >= 10)
   })
 
   it('filters by category', () => {
@@ -70,11 +70,12 @@ describe('starterMessages', () => {
     assert.equal(starter.subject, null)
     assert.equal(starter.previewText, null)
 
-    const fields = starterToFormFields(starter)
+    const fields = starterToFormFields(starter, { shopName: 'oveelab' })
     assert.equal(fields.name, undefined)
     assert.equal(fields.subject, '')
     assert.equal(fields.previewText, '')
-    assert.equal(fields.body, starter.body)
+    assert.equal(fields.body.includes('oveelab'), true)
+    assert.equal(fields.body.includes('{{shop_name}}'), false)
   })
 
   it('provides start-from-scratch fields without leftover content', () => {
