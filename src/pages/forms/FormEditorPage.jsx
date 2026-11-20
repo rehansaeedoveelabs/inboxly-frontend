@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   EmptyState,
@@ -8,6 +8,7 @@ import {
 } from '../../components/ui'
 import { FormStudio } from '../../components/forms/studio/FormStudio'
 import { ApiError } from '../../lib/api'
+import { listStoreAssets, uploadStoreAsset } from '../../lib/assetsApi'
 import {
   createStoreForm,
   defaultFormDefinition,
@@ -76,6 +77,59 @@ export function FormEditorPage() {
   const [actionError, setActionError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [savedFlash, setSavedFlash] = useState(false)
+  const [assets, setAssets] = useState([])
+  const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetsError, setAssetsError] = useState('')
+  const [assetUploading, setAssetUploading] = useState(false)
+  const [assetsNonce, setAssetsNonce] = useState(0)
+
+  useEffect(() => {
+    if (storeStatus === 'loading' || !storeId) return undefined
+
+    let cancelled = false
+    setAssetsLoading(true)
+    setAssetsError('')
+
+    listStoreAssets(storeId, { limit: 100 })
+      .then((page) => {
+        if (cancelled) return
+        setAssets(page.data || [])
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setAssets([])
+        setAssetsError(error instanceof ApiError ? error.message : 'Unable to load images.')
+      })
+      .finally(() => {
+        if (!cancelled) setAssetsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId, storeStatus, assetsNonce])
+
+  const refreshAssets = useCallback(() => setAssetsNonce((n) => n + 1), [])
+
+  const uploadAsset = useCallback(
+    async (file) => {
+      if (!storeId || assetUploading) return
+      setAssetUploading(true)
+      setAssetsError('')
+      try {
+        const created = await uploadStoreAsset(storeId, { file })
+        setAssets((current) => [created, ...current.filter((row) => row.id !== created.id)])
+        return created
+      } catch (error) {
+        const message = error instanceof ApiError ? error.message : 'Unable to upload image.'
+        setAssetsError(message)
+        throw error
+      } finally {
+        setAssetUploading(false)
+      }
+    },
+    [storeId, assetUploading],
+  )
 
   useEffect(() => {
     if (isNew || storeStatus === 'loading' || !storeId) return undefined
@@ -224,6 +278,12 @@ export function FormEditorPage() {
         onSave={() => persist()}
         onSaveAndClose={() => persist({ closeAfter: true })}
         onEnable={toggleEnabled}
+        assets={assets}
+        assetsLoading={assetsLoading}
+        assetsError={assetsError}
+        assetUploading={assetUploading}
+        onUploadAsset={uploadAsset}
+        onRefreshAssets={refreshAssets}
       />
 
       <ConfirmDialog

@@ -35,11 +35,17 @@ export function FormStudio({
   onSaveAndClose,
   onEnable,
   onClose,
+  assets = [],
+  assetsLoading = false,
+  assetsError = '',
+  assetUploading = false,
+  onUploadAsset,
+  onRefreshAssets,
 }) {
   const [device, setDevice] = useState('desktop')
   const [step, setStep] = useState('form')
   const [inspectorTab, setInspectorTab] = useState('behavior')
-  const [openSection, setOpenSection] = useState('display')
+  const [openSection, setOpenSection] = useState('install')
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [contentSelected, setContentSelected] = useState(null)
   const [editingName, setEditingName] = useState(false)
@@ -376,6 +382,12 @@ export function FormStudio({
           onPatchTheme={patchTheme}
           onPatchSuccess={patchSuccess}
           onRemoveField={removeField}
+          assets={assets}
+          assetsLoading={assetsLoading}
+          assetsError={assetsError}
+          assetUploading={assetUploading}
+          onUploadAsset={onUploadAsset}
+          onRefreshAssets={onRefreshAssets}
         />
       </div>
     </div>

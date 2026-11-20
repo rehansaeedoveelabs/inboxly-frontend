@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
   PageHeader,
@@ -42,18 +42,29 @@ function stepsToForm(steps = []) {
 
 export function AutomationEditorPage() {
   const { automationId } = useParams()
+  const [searchParams] = useSearchParams()
   const isNew = !automationId || automationId === 'new'
   const navigate = useNavigate()
   const { activeStore } = useActiveStore()
   const storeId = activeStore?.id
+  const template = searchParams.get('template')
+  const isAbandonedTemplate = isNew && template === 'abandoned_cart'
 
   const [automation, setAutomation] = useState(null)
-  const [name, setName] = useState('Welcome email')
-  const [triggerType, setTriggerType] = useState('contact.email_subscribed')
+  const [name, setName] = useState(isAbandonedTemplate ? 'Abandoned cart recovery' : 'Welcome email')
+  const [triggerType, setTriggerType] = useState(
+    isAbandonedTemplate ? 'checkout.abandoned' : 'contact.email_subscribed',
+  )
   const [requireEmailSubscribed, setRequireEmailSubscribed] = useState(false)
-  const [delayMinutes, setDelayMinutes] = useState(0)
-  const [subject, setSubject] = useState('Welcome')
-  const [body, setBody] = useState('Thanks for subscribing. We’re glad you’re here.')
+  const [delayMinutes, setDelayMinutes] = useState(isAbandonedTemplate ? 60 : 0)
+  const [subject, setSubject] = useState(
+    isAbandonedTemplate ? 'You left something behind' : 'Welcome',
+  )
+  const [body, setBody] = useState(
+    isAbandonedTemplate
+      ? 'Hi {{first_name}}, you left items in your cart at {{shop_name}}. Come back and finish checkout.'
+      : 'Thanks for subscribing. We’re glad you’re here.',
+  )
   const [enrollments, setEnrollments] = useState([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
@@ -298,9 +309,16 @@ export function AutomationEditorPage() {
                 disabled={!isNew || saving}
                 onChange={(event) => setTriggerType(event.target.value)}
               >
-                <option value="contact.email_subscribed">contact.email_subscribed</option>
-                <option value="contact.tag_added">contact.tag_added</option>
+                <option value="contact.email_subscribed">Email subscribed</option>
+                <option value="contact.tag_added">Tag added</option>
+                <option value="checkout.abandoned">Checkout abandoned (Shopify)</option>
               </select>
+              {triggerType === 'checkout.abandoned' ? (
+                <p className="mt-1 text-xs text-muted">
+                  Fires when Shopify sends a checkout webhook with a customer email. Reconnect
+                  Shopify if `read_checkouts` is missing.
+                </p>
+              ) : null}
             </FormField>
             <label className="flex items-start gap-2 text-sm text-ink">
               <input

@@ -35,6 +35,10 @@ describe('emailTemplatesApi', () => {
     assert.equal(doc.version, 1)
     assert.ok(Array.isArray(doc.blocks))
     assert.equal(createEmailBlock('button').props.label, 'Shop now')
+    const product = createEmailBlock('product')
+    assert.equal(product.type, 'product')
+    assert.equal(product.props.shopify_product_id, null)
+    assert.equal(product.props.button_label, 'Shop now')
   })
 
   it('lists and creates templates', async () => {

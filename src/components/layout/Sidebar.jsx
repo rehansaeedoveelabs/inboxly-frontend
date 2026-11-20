@@ -117,7 +117,7 @@ export function Sidebar({
               collapsed && !mobileOpen && 'text-center',
             )}
           >
-            {collapsed && !mobileOpen ? 'P' : 'Prototype data'}
+            {collapsed && !mobileOpen ? 'In' : 'Inboxly'}
           </p>
         </div>
       </aside>

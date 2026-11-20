@@ -10,6 +10,8 @@ export const SEGMENT_FIELDS = [
   { value: 'consent.email', label: 'Email consent' },
   { value: 'consent.sms', label: 'SMS consent' },
   { value: 'consent.push', label: 'Push consent' },
+  { value: 'orders.has', label: 'Has purchased (Shopify)' },
+  { value: 'orders.count', label: 'Order count (Shopify)' },
 ]
 
 export const SEGMENT_OPS = [
@@ -21,9 +23,13 @@ export const SEGMENT_OPS = [
   { value: 'not_in', label: 'Not in list' },
   { value: 'is_null', label: 'Is empty' },
   { value: 'is_not_null', label: 'Is not empty' },
+  { value: 'gte', label: 'At least' },
+  { value: 'lte', label: 'At most' },
 ]
 
 const CONSENT_OPS = new Set(['eq', 'neq', 'in', 'not_in', 'is_null', 'is_not_null'])
+const ORDERS_HAS_OPS = new Set(['is_not_null', 'is_null'])
+const ORDERS_COUNT_OPS = new Set(['eq', 'neq', 'gte', 'lte'])
 const LIST_OPS = new Set(['in', 'not_in'])
 const NULL_OPS = new Set(['is_null', 'is_not_null'])
 
@@ -35,10 +41,21 @@ export function defaultSegmentRules() {
 }
 
 export function opsForField(field) {
-  if (String(field || '').startsWith('consent.')) {
+  const key = String(field || '')
+  if (key.startsWith('consent.')) {
     return SEGMENT_OPS.filter((op) => CONSENT_OPS.has(op.value))
   }
-  return SEGMENT_OPS
+  if (key === 'orders.has') {
+    return SEGMENT_OPS.filter((op) => ORDERS_HAS_OPS.has(op.value)).map((op) =>
+      op.value === 'is_not_null'
+        ? { ...op, label: 'Has at least one order' }
+        : { ...op, label: 'Has never purchased' },
+    )
+  }
+  if (key === 'orders.count') {
+    return SEGMENT_OPS.filter((op) => ORDERS_COUNT_OPS.has(op.value))
+  }
+  return SEGMENT_OPS.filter((op) => !['gte', 'lte'].includes(op.value))
 }
 
 /**

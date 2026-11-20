@@ -141,7 +141,7 @@ export function CampaignDetailPage() {
       const result = await testSendCampaign(campaign.id)
       if (result.accepted) {
         setTestNotice(
-          `Test email accepted for ${result.to}. Locally this uses the fake mail driver and is not delivered via Brevo.`,
+          `Test email accepted for ${result.to}. Delivery depends on your workspace email configuration.`,
         )
       } else {
         setActionError(result.error_message || 'Test send was rejected.')
@@ -203,7 +203,8 @@ export function CampaignDetailPage() {
   const isDraft = campaign.status === 'draft'
   const isScheduled = campaign.status === 'scheduled'
   const isEmail = campaign.channel === 'email'
-  const canSendEmail = isEmail && (isDraft || isScheduled)
+  const isSms = campaign.channel === 'sms'
+  const canSend = (isEmail || isSms) && (isDraft || isScheduled)
   const audience = formatCampaignAudience(campaign, segmentNames)
 
   return (
@@ -236,7 +237,7 @@ export function CampaignDetailPage() {
                 Send test
               </Button>
             ) : null}
-            {canSendEmail ? (
+            {canSend ? (
               <Button disabled={busy} onClick={() => setConfirmSend(true)}>
                 Send now
               </Button>
@@ -264,10 +265,10 @@ export function CampaignDetailPage() {
         </p>
       ) : null}
 
-      {!isEmail ? (
+      {isSms ? (
         <p className="mb-3 rounded-md border border-line bg-midnight px-3 py-2 text-sm text-muted" role="status">
-          SMS uses the configured messaging driver. Locally set MESSAGING_SMS_DRIVER=fake for fake
-          delivery (no real carrier). Keep disabled until a real SMS provider is wired.
+          SMS send uses contacts with a phone number and subscribed SMS consent. Delivery uses your
+          workspace SMS configuration (fake locally, Vonage when configured).
         </p>
       ) : null}
 
@@ -284,6 +285,12 @@ export function CampaignDetailPage() {
         <MetricCard label="Channel" value={String(campaign.channel || '').toUpperCase()} />
         {campaign.sent_count != null ? (
           <MetricCard label="Sent" value={formatNumber(campaign.sent_count)} />
+        ) : null}
+        {campaign.opened_count != null ? (
+          <MetricCard label="Opened" value={formatNumber(campaign.opened_count)} />
+        ) : null}
+        {campaign.clicked_count != null ? (
+          <MetricCard label="Clicked" value={formatNumber(campaign.clicked_count)} />
         ) : null}
         {campaign.failed_count != null ? (
           <MetricCard label="Failed" value={formatNumber(campaign.failed_count)} />
@@ -370,7 +377,7 @@ export function CampaignDetailPage() {
         open={confirmSend}
         onClose={() => setConfirmSend(false)}
         title="Send campaign now?"
-        description="This queues email delivery to the eligible audience. Locally, messages use the fake mail driver and are not sent through Brevo or any live provider."
+        description="This queues email delivery to the eligible audience. Delivery uses your workspace email configuration."
         confirmLabel="Send now"
         onConfirm={onSendNow}
       />

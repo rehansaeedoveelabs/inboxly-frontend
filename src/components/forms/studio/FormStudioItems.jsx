@@ -75,6 +75,9 @@ export function createFormField(type) {
     type,
     label: defaultLabel(type),
     required: type === 'consent' || type === 'email',
+    ...(type === 'image'
+      ? { props: { asset_id: null, src: null, alt: '' }, required: false }
+      : {}),
     ...(game ? { props: { prizes: ['5% off', '10% off', '20% off', '30% off'] } } : {}),
   }
 }

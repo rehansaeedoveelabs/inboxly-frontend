@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { AssetThumbnail } from '../../assets/AssetThumbnail'
 import { cn } from '../../../lib/cn'
 import {
   FormCountdown,
@@ -60,16 +61,26 @@ function FieldPreview({ field, selected, onSelect, accent }) {
     )
   }
   if (field.type === 'image') {
+    const src = typeof field.props?.src === 'string' ? field.props.src.trim() : ''
+    const assetId = field.props?.asset_id || null
+    const alt = field.props?.alt || field.label || 'Image'
     return (
       <button
         type="button"
         onClick={() => onSelect?.(field.id)}
         className={cn(
-          'flex h-24 w-full items-center justify-center rounded-md border border-dashed border-black/20 text-xs text-black/40',
+          'flex w-full items-center justify-center overflow-hidden rounded-md',
           selected && 'ring-2 ring-[#14b8a6] ring-offset-2',
+          !src && !assetId && 'h-24 border border-dashed border-black/20 text-xs text-black/40',
         )}
       >
-        Image
+        {src && /^https?:\/\//i.test(src) ? (
+          <img src={src} alt={alt} className="max-h-40 w-full object-contain" />
+        ) : assetId ? (
+          <AssetThumbnail assetId={assetId} alt={alt} className="h-40 w-full" imgClassName="object-contain" />
+        ) : (
+          'Add an image'
+        )}
       </button>
     )
   }

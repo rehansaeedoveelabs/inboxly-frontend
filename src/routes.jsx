@@ -1,4 +1,4 @@
-import { Navigate, useRoutes } from 'react-router-dom'
+import { useRoutes } from 'react-router-dom'
 import { GuestRoute } from './auth/GuestRoute'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/layout/AppShell'
@@ -32,6 +32,7 @@ import { StorefrontIntegrationPage } from './pages/settings/StorefrontIntegratio
 import { MetaIntegrationPage } from './pages/settings/MetaIntegrationPage'
 import { ChannelSettingsPage } from './pages/settings/ChannelSettingsPage'
 import { AccountSettingsPage } from './pages/settings/AccountSettingsPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { VerifyEmailOtpPage } from './pages/auth/VerifyEmailOtpPage'
@@ -120,7 +121,7 @@ export function AppRoutes() {
         { path: 'settings/channels', element: <ChannelSettingsPage /> },
         { path: 'settings/account', element: <AccountSettingsPage /> },
 
-        { path: '*', element: <Navigate to="/" replace /> },
+        { path: '*', element: <NotFoundPage /> },
       ],
     },
   ])

@@ -1,4 +1,5 @@
 import { ApiError, toApiError } from './api.js'
+import { seedAssetSourceBlob } from './assetPreviewCache.js'
 import {
   assertAudienceOk,
   audienceFetch,
@@ -21,6 +22,87 @@ import {
 
 const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 export const ASSET_MAX_BYTES = 5_242_880
+/** Skip client compress under this size — already cheap to tunnel. */
+const SKIP_COMPRESS_BYTES = 350_000
+/** Longest edge after client resize before upload. */
+const UPLOAD_MAX_EDGE = 2048
+
+/**
+ * @param {string} name
+ * @param {string} ext
+ */
+function withExtension(name, ext) {
+  const base = typeof name === 'string' && name.trim() !== '' ? name.trim() : 'image'
+  return base.replace(/\.[^.]+$/, '') + '.' + ext
+}
+
+/**
+ * Downscale / recompress large photos before multipart upload (faster over tunnels).
+ * GIFs and already-small files pass through. Failures return the original file.
+ *
+ * @param {File} file
+ * @param {{ maxEdge?: number, quality?: number }} [options]
+ * @returns {Promise<File>}
+ */
+export async function compressImageForUpload(file, options = {}) {
+  if (!(file instanceof File) && !(file instanceof Blob)) return file
+  if (!file.type || file.type === 'image/gif') return file
+  if (typeof file.size === 'number' && file.size <= SKIP_COMPRESS_BYTES) return file
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file
+
+  const maxEdge =
+    typeof options.maxEdge === 'number' && options.maxEdge > 0 ? options.maxEdge : UPLOAD_MAX_EDGE
+  const quality =
+    typeof options.quality === 'number' && options.quality > 0 && options.quality <= 1
+      ? options.quality
+      : 0.82
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const longest = Math.max(bitmap.width, bitmap.height) || 1
+    const scale = longest > maxEdge ? maxEdge / longest : 1
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+
+    // PNG logos: only resize when oversized; keep PNG for transparency.
+    const keepPng = file.type === 'image/png'
+    if (keepPng && scale === 1 && file.size <= 1_200_000) {
+      bitmap.close?.()
+      return file
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      bitmap.close?.()
+      return file
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close?.()
+
+    const mime = keepPng ? 'image/png' : 'image/jpeg'
+    const blob = await new Promise((resolve) => {
+      if (keepPng) canvas.toBlob((next) => resolve(next), mime)
+      else canvas.toBlob((next) => resolve(next), mime, quality)
+    })
+
+    if (!blob || blob.size === 0) return file
+    // Prefer original when compression did not help.
+    if (blob.size >= file.size * 0.98) return file
+
+    const name =
+      file instanceof File
+        ? withExtension(file.name, keepPng ? 'png' : 'jpg')
+        : keepPng
+          ? 'image.png'
+          : 'image.jpg'
+    return new File([blob], name, { type: mime, lastModified: Date.now() })
+  } catch {
+    return file
+  }
+}
 
 /**
  * @param {string | null | undefined} assetId
@@ -70,18 +152,29 @@ export async function listStoreAssets(storeId, params = {}, deps = {}) {
 /**
  * POST /api/v1/stores/{store}/assets (multipart)
  *
+ * Compresses large images client-side first, then seeds the preview cache so
+ * thumbnails do not re-download the just-uploaded bytes.
+ *
  * @param {string} storeId
- * @param {{ file: File, alt?: string | null }} payload
+ * @param {{ file: File, alt?: string | null, compress?: boolean }} payload
  * @param {{ fetchFn?: typeof fetch, cookieString?: string }} [deps]
  */
 export async function uploadStoreAsset(storeId, payload, deps = {}) {
-  const fileError = validateAssetFile(payload?.file)
+  const original = payload?.file
+  const fileError = validateAssetFile(original)
   if (fileError) {
     throw new ApiError(fileError, { status: 422, errors: { file: [fileError] } })
   }
 
+  const shouldCompress = payload?.compress !== false
+  const file = shouldCompress ? await compressImageForUpload(original) : original
+  const preparedError = validateAssetFile(file)
+  if (preparedError) {
+    throw new ApiError(preparedError, { status: 422, errors: { file: [preparedError] } })
+  }
+
   const form = new FormData()
-  form.append('file', payload.file)
+  form.append('file', file)
   if (typeof payload.alt === 'string' && payload.alt.trim() !== '') {
     form.append('alt', payload.alt.trim())
   }
@@ -96,7 +189,9 @@ export async function uploadStoreAsset(storeId, payload, deps = {}) {
     deps,
   )
   await assertAudienceOk(response, 'Unable to upload the asset.')
-  return readAudienceResource(response, 'asset')
+  const asset = await readAudienceResource(response, 'asset')
+  if (asset?.id) seedAssetSourceBlob(asset.id, file)
+  return asset
 }
 
 /**

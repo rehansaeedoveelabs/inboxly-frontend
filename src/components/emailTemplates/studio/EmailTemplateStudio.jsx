@@ -45,6 +45,9 @@ export function EmailTemplateStudio({
   assetsLoading = false,
   assetsError = '',
   assetUploading = false,
+  products = [],
+  productsLoading = false,
+  productsError = '',
   saving = false,
   savedFlash = false,
   pickingForCampaign = false,
@@ -55,6 +58,7 @@ export function EmailTemplateStudio({
   onRefreshPreview,
   onUploadAsset,
   onRefreshAssets,
+  onRefreshProducts,
   onDelete,
   nameError,
   actionError,
@@ -136,6 +140,30 @@ export function EmailTemplateStudio({
         : block,
     )
     updateBlocks(next)
+  }
+
+  const insertMergeTag = (tag) => {
+    if (!tag) return
+    if (
+      selectedBlock &&
+      (selectedBlock.type === 'text' ||
+        selectedBlock.type === 'header' ||
+        selectedBlock.type === 'footer')
+    ) {
+      const html = String(selectedBlock.props?.html || '')
+      updateBlockProps({ html: html ? `${html}${tag}` : tag })
+      return
+    }
+    if (selectedBlock?.type === 'button') {
+      const label = String(selectedBlock.props?.label || '')
+      updateBlockProps({ label: `${label}${tag}` })
+      return
+    }
+    const block = createEmailBlock('text')
+    block.props = { ...(block.props || {}), html: `<p>${tag}</p>`, align: 'left' }
+    updateBlocks([...blocks, block])
+    setSelectedBlockId(block.id)
+    setRail('layers')
   }
 
   const pickAsset = (assetId) => {
@@ -475,6 +503,7 @@ export function EmailTemplateStudio({
           onUploadAsset={onUploadAsset}
           onRefreshAssets={onRefreshAssets}
           onReorderBlocks={reorderBlocks}
+          onInsertMergeTag={insertMergeTag}
         />
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-secondary/40">
@@ -611,6 +640,9 @@ export function EmailTemplateStudio({
           assetsLoading={assetsLoading}
           assetsError={assetsError}
           assetUploading={assetUploading}
+          products={products}
+          productsLoading={productsLoading}
+          productsError={productsError}
           onUpdateSettings={updateSettings}
           onUpdateBlockProps={updateBlockProps}
           onMoveBlock={moveSelected}
@@ -618,6 +650,7 @@ export function EmailTemplateStudio({
           onClearSelection={() => setSelectedBlockId(null)}
           onUploadAsset={onUploadAsset}
           onRefreshAssets={onRefreshAssets}
+          onRefreshProducts={onRefreshProducts}
         />
       </div>
     </div>

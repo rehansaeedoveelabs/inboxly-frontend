@@ -8,6 +8,8 @@ export const SHOPIFY_SCOPE_LABELS = Object.freeze({
   read_products: 'Read products',
   read_orders: 'Read orders',
   read_all_orders: 'Read all historical orders',
+  read_themes: 'Read Online Store themes',
+  read_brand: 'Read store brand kit',
 })
 
 /** Short “why this matters” blurbs for missing-scope lists. */
@@ -17,6 +19,8 @@ export const SHOPIFY_SCOPE_REASONS = Object.freeze({
   read_products: 'Sync products for catalog and personalization.',
   read_orders: 'Sync recent orders.',
   read_all_orders: 'Sync the full historical order archive.',
+  read_themes: 'Import Brand asset colors from the live theme.',
+  read_brand: 'Import logo and brand colors into Inboxly Brand assets.',
 })
 
 /**

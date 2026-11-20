@@ -4,7 +4,6 @@ import {
   PageHeader,
   MetricCard,
   ChartContainer,
-  DateRangeSelector,
   Tabs,
   Table,
   Badge,
@@ -34,7 +33,6 @@ import {
 export function AnalyticsPage() {
   const { activeStore, status: storeStatus } = useActiveStore()
   const storeId = activeStore?.id
-  const [range, setRange] = useState('30d')
   const [reportTab, setReportTab] = useState('campaigns')
   const { resolved } = useTheme()
   const chart = getChartThemeColors()
@@ -86,6 +84,7 @@ export function AnalyticsPage() {
 
   const campaigns = overview?.campaigns || {}
   const automations = overview?.automations || {}
+  const engagement = overview?.engagement || {}
   const series = (overview?.audience_series || []).map((row) => ({
     label: row.label,
     contacts: row.contacts,
@@ -148,14 +147,23 @@ export function AnalyticsPage() {
       <PageHeader
         title="Analytics"
         description={`Live audience and campaign metrics for ${activeStore.name}. Revenue attribution is not available yet.`}
-        actions={<DateRangeSelector value={range} onChange={setRange} className="w-40" />}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Contacts" value={formatNumber(overview?.contacts_total || 0)} hint="Store audience" />
         <MetricCard label="Email subscribers" value={formatNumber(overview?.email_subscribers || 0)} hint="Subscribed consent" />
         <MetricCard label="SMS subscribers" value={formatNumber(overview?.sms_subscribers || 0)} hint="Subscribed consent" />
         <MetricCard label="Campaigns sent" value={formatNumber(campaigns.sent || 0)} hint={`${campaigns.total || 0} total`} />
+        <MetricCard
+          label="Open rate"
+          value={`${engagement.open_rate ?? 0}%`}
+          hint={`${formatNumber(engagement.emails_opened || 0)} of ${formatNumber(engagement.emails_sent || 0)} sent`}
+        />
+        <MetricCard
+          label="Click rate"
+          value={`${engagement.click_rate ?? 0}%`}
+          hint={`${formatNumber(engagement.emails_clicked || 0)} of ${formatNumber(engagement.emails_sent || 0)} sent`}
+        />
         <MetricCard label="Active automations" value={formatNumber(automations.active || 0)} hint={`${automations.total || 0} total`} />
         <MetricCard
           label="Automation enrollments"

@@ -23,6 +23,7 @@ export const EMAIL_BLOCK_TYPES = [
   'header',
   'text',
   'image',
+  'product',
   'button',
   'divider',
   'spacer',
@@ -81,6 +82,23 @@ export function createEmailBlock(type) {
       return { id, type, props: { html: '<p>New text block</p>', align: 'left' } }
     case 'image':
       return { id, type, props: { asset_id: null, alt: '', href: null } }
+    case 'product':
+      return {
+        id,
+        type,
+        props: {
+          shopify_product_id: null,
+          title: '',
+          image_url: null,
+          product_url: null,
+          price: null,
+          currency_code: null,
+          button_label: 'Shop now',
+          show_title: true,
+          show_price: true,
+          show_button: true,
+        },
+      }
     case 'button':
       return { id, type, props: { label: 'Shop now', href: 'https://example.com' } }
     case 'divider':

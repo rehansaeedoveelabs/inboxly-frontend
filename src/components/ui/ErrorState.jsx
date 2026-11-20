@@ -4,7 +4,7 @@ import { Button } from './Button'
 
 export function ErrorState({
   title = 'Something went wrong',
-  description = 'This is a prototype error state. No backend request was made.',
+  description = 'Something went wrong loading this page. Try again in a moment.',
   onRetry,
   className,
 }) {

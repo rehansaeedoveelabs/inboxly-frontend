@@ -12,7 +12,8 @@ This repository is the browser UI. It talks to the Laravel API over Sanctum **co
 - Workspace store list, creation, and active-store selection
 - Shopify connect / reconnect / disconnect UI (OAuth redirect to API)
 - Audience UI: contacts, tags, segments, imports, exports (wired to live APIs)
-- Shell navigation for future marketing modules (many pages are still mock)
+- Campaigns, automation, forms, insights, brand/assets, Meta/Shopify settings (live APIs)
+- Shell navigation and account settings
 
 ## Technology stack
 
@@ -34,7 +35,7 @@ Source is **JavaScript/JSX** (not TypeScript). There is no React Query, Redux, o
 
 - Entry: `index.html` → `src/main.jsx` → `ThemeProvider` → `BrowserRouter` → `AuthProvider` → `App` → `AppRoutes` (`src/routes.jsx`)
 - Public: `/login`, `/register` (`GuestRoute`)
-- Protected: `/` shell (`ProtectedRoute` → `AppShell`) with audience, settings, and mock marketing routes
+- Protected: `/` shell (`ProtectedRoute` → `AppShell`) with audience, campaigns, automation, forms, insights, resources, and settings routes
 
 ## Authentication and session
 
@@ -58,10 +59,11 @@ Source is **JavaScript/JSX** (not TypeScript). There is no React Query, Redux, o
 
 | Module | Status |
 |--------|--------|
-| Auth, stores, Shopify connect UI | **Implemented** (live API) |
+| Auth, stores, Shopify connect / commerce sync | **Implemented** (live API) |
 | Contacts, tags, segments, imports, exports | **Implemented** (live API) |
-| Dashboard, campaigns, automation, forms, insights, resources, account/channels | **Mock** (`src/mock/*`) |
-| Members / invitations / password reset / email-verified pages | **Missing** |
+| Campaigns, Meta Facebook publish, automation (welcome), forms | **Implemented** (live API) |
+| Insights, brand assets, image library, email/SMS templates, channels | **Implemented** (live API) |
+| Members invite UI / password-reset pages / web push delivery | **Missing / deferred** |
 
 Details: [docs/ROADMAP-AND-GAPS.md](docs/ROADMAP-AND-GAPS.md)
 

@@ -8,6 +8,7 @@ import {
   LayoutTemplate,
   Minus,
   MousePointerClick,
+  Package,
   Pilcrow,
   PanelBottom,
   Space,
@@ -27,6 +28,7 @@ const CONTENT_BLOCKS = [
   { type: 'header', label: 'Heading', icon: Heading1 },
   { type: 'text', label: 'Paragraph', icon: Pilcrow },
   { type: 'image', label: 'Image', icon: ImageIcon },
+  { type: 'product', label: 'Product', icon: Package },
   { type: 'button', label: 'Button', icon: MousePointerClick },
 ]
 
@@ -92,6 +94,7 @@ export function StudioLeftPanel({
   onUploadAsset,
   onRefreshAssets,
   onReorderBlocks,
+  onInsertMergeTag,
 }) {
   const copy = PANEL_COPY[rail] || PANEL_COPY.elements
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId)
@@ -279,14 +282,26 @@ export function StudioLeftPanel({
           ) : null}
 
           {rail === 'variables' ? (
-            <ul className="space-y-1.5">
-              {MERGE_TAGS.map((item) => (
-                <li key={item.tag} className="rounded-lg border border-line bg-elevated px-3 py-2.5">
-                  <code className="text-[12px] font-semibold text-electric">{item.tag}</code>
-                  <p className="mt-0.5 text-[11px] text-muted">{item.hint}</p>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-2">
+              <p className="text-[11px] leading-relaxed text-muted">
+                Click a tag to insert it into the selected text, header, footer, or button block.
+                Tags personalize at send time.
+              </p>
+              <ul className="space-y-1.5">
+                {MERGE_TAGS.map((item) => (
+                  <li key={item.tag}>
+                    <button
+                      type="button"
+                      onClick={() => onInsertMergeTag?.(item.tag)}
+                      className="w-full rounded-lg border border-line bg-elevated px-3 py-2.5 text-left transition hover:border-electric/45 hover:bg-electric/5"
+                    >
+                      <code className="text-[12px] font-semibold text-electric">{item.tag}</code>
+                      <p className="mt-0.5 text-[11px] text-muted">{item.hint}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
         </div>
       </div>

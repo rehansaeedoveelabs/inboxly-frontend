@@ -18,6 +18,18 @@ const urlCache = new Map()
 const urlInflight = new Map()
 
 /**
+ * Seed cache after a local upload so thumbs don't re-download the full file.
+ *
+ * @param {string} assetId
+ * @param {Blob} blob
+ */
+export function seedAssetSourceBlob(assetId, blob) {
+  const id = typeof assetId === 'string' ? assetId.trim() : ''
+  if (!id || !(blob instanceof Blob)) return
+  sourceBlobs.set(id, blob)
+}
+
+/**
  * @param {string} assetId
  * @returns {Promise<Blob>}
  */

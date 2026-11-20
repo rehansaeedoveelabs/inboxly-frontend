@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { FormField, Input, Select, Textarea } from '../../ui'
 import { EmailAssetPicker } from '../EmailAssetPicker'
+import { EmailProductPicker } from '../EmailProductPicker'
+import { productBlockPropsFromShopifyProduct } from '../../../lib/shopifyProductsApi'
 import { cn } from '../../../lib/cn'
 
 function AlignControl({ value, onChange }) {
@@ -100,6 +102,9 @@ export function StudioInspector({
   assetsLoading = false,
   assetsError = '',
   assetUploading = false,
+  products = [],
+  productsLoading = false,
+  productsError = '',
   onUpdateSettings,
   onUpdateBlockProps,
   onMoveBlock,
@@ -107,6 +112,7 @@ export function StudioInspector({
   onClearSelection,
   onUploadAsset,
   onRefreshAssets,
+  onRefreshProducts,
 }) {
   if (!block) {
     return (
@@ -300,6 +306,81 @@ export function StudioInspector({
                 placeholder="https://"
               />
             </FormField>
+          </>
+        ) : null}
+
+        {block.type === 'product' ? (
+          <>
+            {!block.props?.shopify_product_id ? (
+              <p
+                className="rounded-lg border border-cantaloupe/40 bg-cantaloupe/10 px-3 py-2 text-[11px] leading-relaxed text-cantaloupe-ink"
+                role="status"
+              >
+                Pick a synced Shopify product to show its featured image, title, and shop link in
+                the email.
+              </p>
+            ) : (
+              <p className="rounded-lg border border-line bg-midnight/50 px-3 py-2 text-[11px] leading-relaxed text-muted">
+                Product media comes from Shopify commerce sync. Re-sync in Storefront settings if an
+                image looks outdated.
+              </p>
+            )}
+            <EmailProductPicker
+              products={products}
+              value={block.props?.shopify_product_id || null}
+              loading={productsLoading}
+              error={productsError}
+              onRefresh={onRefreshProducts}
+              onSelect={(product) => {
+                onUpdateBlockProps({
+                  ...productBlockPropsFromShopifyProduct(product),
+                  button_label: block.props?.button_label || 'Shop now',
+                  show_title: block.props?.show_title !== false,
+                  show_price: block.props?.show_price !== false,
+                  show_button: block.props?.show_button !== false,
+                })
+              }}
+            />
+            <FormField label="Button label">
+              <Input
+                className="h-9"
+                value={block.props?.button_label || 'Shop now'}
+                onChange={(event) => onUpdateBlockProps({ button_label: event.target.value })}
+              />
+            </FormField>
+            <label className="flex items-center gap-2 text-[12px] text-ink">
+              <input
+                type="checkbox"
+                checked={block.props?.show_title !== false}
+                onChange={(event) => onUpdateBlockProps({ show_title: event.target.checked })}
+              />
+              Show product title
+            </label>
+            <label className="flex items-center gap-2 text-[12px] text-ink">
+              <input
+                type="checkbox"
+                checked={block.props?.show_price !== false}
+                onChange={(event) => onUpdateBlockProps({ show_price: event.target.checked })}
+              />
+              Show price
+            </label>
+            <label className="flex items-center gap-2 text-[12px] text-ink">
+              <input
+                type="checkbox"
+                checked={block.props?.show_button !== false}
+                onChange={(event) => onUpdateBlockProps({ show_button: event.target.checked })}
+              />
+              Show shop button
+            </label>
+            {block.props?.price ? (
+              <p className="text-[11px] text-muted">
+                Price:{' '}
+                {[block.props.currency_code, block.props.price].filter(Boolean).join(' ')}
+              </p>
+            ) : null}
+            {block.props?.product_url ? (
+              <p className="break-all text-[10px] text-muted">Link: {block.props.product_url}</p>
+            ) : null}
           </>
         ) : null}
 

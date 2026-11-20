@@ -325,8 +325,10 @@ export function MetaIntegrationPage() {
               ) : null}
               {!connected ? (
                 <p className="mt-3 text-sm text-muted">
-                  Admins can connect Meta for this store. With the fake driver, connection completes
-                  against Inboxly&apos;s simulated provider (not a real Facebook account).
+                  Admins can connect Meta for this store to publish to Facebook Pages.
+                  {import.meta.env.DEV
+                    ? ' In local development with the fake Meta driver, connection uses Inboxly’s simulated provider.'
+                    : ''}
                 </p>
               ) : null}
             </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, HelpCircle, Menu, UserRound } from 'lucide-react'
+import { Menu, UserRound } from 'lucide-react'
 import { useAuth } from '../../auth/useAuth'
 import { storeStatusLabel, storeStatusTone } from '../../lib/storesApi'
 import { useActiveStore } from '../../store/useActiveStore'
@@ -13,7 +13,6 @@ export function Header({ onMenuClick }) {
   const { stores, activeStore, selectStore, status } = useActiveStore()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [noticeOpen, setNoticeOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
   const onUserMenuSelect = async (item) => {
@@ -75,7 +74,7 @@ export function Header({ onMenuClick }) {
           />
         ) : (
           <span className="flex items-center gap-2 text-sm text-muted">
-            <span>No real stores yet</span>
+            <span>No stores yet</span>
             <Badge tone="warning">Empty</Badge>
           </span>
         )}
@@ -83,17 +82,6 @@ export function Header({ onMenuClick }) {
 
       <div className="flex items-center gap-1.5 sm:gap-2">
         <ThemeSwitcher />
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Notifications"
-          onClick={() => setNoticeOpen((value) => !value)}
-        >
-          <Bell className="size-4" />
-        </Button>
-        <Button variant="ghost" size="sm" aria-label="Help" className="hidden sm:inline-flex">
-          <HelpCircle className="size-4" />
-        </Button>
 
         <Dropdown
           align="right"
@@ -115,23 +103,6 @@ export function Header({ onMenuClick }) {
           onSelect={onUserMenuSelect}
         />
       </div>
-
-      {noticeOpen ? (
-        <div className="absolute top-14 right-3 z-40 w-72 rounded-md border border-line bg-elevated p-3 shadow-lg sm:right-4">
-          <p className="text-sm font-semibold text-ink">Prototype notices</p>
-          <p className="mt-1 text-xs text-muted">
-            Local UI only. No messages are synced from a backend.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-            onClick={() => setNoticeOpen(false)}
-          >
-            Dismiss
-          </Button>
-        </div>
-      ) : null}
     </header>
   )
 }

@@ -641,8 +641,8 @@ export function CampaignWizardPage() {
             </p>
           ) : null}
           <p className="mt-3 text-xs text-muted">
-            Scheduling stores the eligible audience count. No email or SMS is delivered in this
-            phase.
+            Scheduling stores the send time and eligible audience count. After you finish, open the
+            campaign and use Send now (or wait for the schedule) to deliver.
           </p>
         </Card>
       )}

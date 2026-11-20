@@ -22,6 +22,17 @@ describe('segmentsUi', () => {
     assert.ok(!ops.includes('contains'))
   })
 
+  it('limits order fields to purchase ops', () => {
+    assert.deepEqual(
+      opsForField('orders.has').map((o) => o.value),
+      ['is_null', 'is_not_null'],
+    )
+    assert.deepEqual(
+      opsForField('orders.count').map((o) => o.value),
+      ['eq', 'neq', 'gte', 'lte'],
+    )
+  })
+
   it('converts list values and null ops for the API', () => {
     assert.deepEqual(
       toApiRules({

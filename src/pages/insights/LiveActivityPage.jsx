@@ -108,10 +108,14 @@ export function LiveActivityPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={Activity}
-          title="Still no contact activity"
-          description="When contacts join, submit forms, or change consent, events appear here."
-          actionLabel="Reset filter"
-          onAction={() => setFilter('all')}
+          title="No activity yet"
+          description={
+            filter === 'all'
+              ? 'When contacts join, submit forms, or change consent, events appear here.'
+              : 'No events match this filter. Try All events.'
+          }
+          actionLabel={filter === 'all' ? undefined : 'Show all events'}
+          onAction={filter === 'all' ? undefined : () => setFilter('all')}
         />
       ) : (
         <Card padding={false}>

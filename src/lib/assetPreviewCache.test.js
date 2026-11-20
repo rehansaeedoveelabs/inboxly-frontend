@@ -6,5 +6,6 @@ describe('assetPreviewCache helpers', () => {
     const mod = await import('./assetPreviewCache.js')
     assert.equal(typeof mod.getAssetPreviewUrl, 'function')
     assert.equal(typeof mod.releaseAssetPreviewUrl, 'function')
+    assert.equal(typeof mod.seedAssetSourceBlob, 'function')
   })
 })

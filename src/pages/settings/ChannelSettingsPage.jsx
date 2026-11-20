@@ -111,7 +111,7 @@ export function ChannelSettingsPage() {
         items={[
           { value: 'email', label: 'Email' },
           { value: 'sms', label: 'SMS' },
-          { value: 'webpush', label: 'Web push' },
+          { value: 'webpush', label: 'Web push (soon)' },
         ]}
       />
 
@@ -168,7 +168,8 @@ export function ChannelSettingsPage() {
             />
           </FormField>
           <p className="text-xs text-muted">
-            Delivery still uses Brevo/fake drivers from server env. These values are store defaults for content and compliance.
+            These are store defaults for campaign content and compliance. Delivery is configured for
+            your Inboxly workspace.
           </p>
           <Button disabled={saving} onClick={save}>
             {saving ? 'Saving…' : 'Save email settings'}
@@ -228,53 +229,13 @@ export function ChannelSettingsPage() {
       {tab === 'webpush' ? (
         <Card className="max-w-2xl space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Web push settings</h3>
-            <Badge tone={settings.web_push.enabled ? 'success' : 'neutral'}>
-              {settings.web_push.enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
+            <h3 className="text-sm font-semibold text-ink">Web push</h3>
+            <Badge tone="neutral">Coming soon</Badge>
           </div>
-          <FormField label="Prompt icon label">
-            <Input
-              value={settings.web_push.icon_label}
-              onChange={(event) =>
-                setSettings((value) => ({
-                  ...value,
-                  web_push: { ...value.web_push, icon_label: event.target.value },
-                }))
-              }
-            />
-          </FormField>
-          <FormField label="Prompt delay (seconds)">
-            <Input
-              type="number"
-              value={settings.web_push.prompt_delay_seconds}
-              onChange={(event) =>
-                setSettings((value) => ({
-                  ...value,
-                  web_push: {
-                    ...value.web_push,
-                    prompt_delay_seconds: Number(event.target.value),
-                  },
-                }))
-              }
-            />
-          </FormField>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={settings.web_push.enabled}
-              onChange={(event) =>
-                setSettings((value) => ({
-                  ...value,
-                  web_push: { ...value.web_push, enabled: event.target.checked },
-                }))
-              }
-            />
-            Enable web push prompts for this store
-          </label>
-          <Button disabled={saving} onClick={save}>
-            {saving ? 'Saving…' : 'Save web push settings'}
-          </Button>
+          <p className="text-sm text-muted">
+            Browser push notifications are not available yet. Email and SMS settings above are live
+            for this store.
+          </p>
         </Card>
       ) : null}
     </div>

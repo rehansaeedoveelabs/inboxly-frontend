@@ -10,9 +10,16 @@ import {
   Tags,
   Timer,
 } from 'lucide-react'
+import { EmailAssetPicker } from '../../emailTemplates/EmailAssetPicker'
 import { cn } from '../../../lib/cn'
 
 const BEHAVIOR_ROWS = [
+  {
+    id: 'install',
+    icon: Link2,
+    title: 'Install on your store',
+    hint: 'Copy embed code',
+  },
   {
     id: 'audience',
     icon: Tags,
@@ -92,6 +99,12 @@ export function FormStudioInspector({
   onPatchTheme,
   onPatchSuccess,
   onRemoveField,
+  assets = [],
+  assetsLoading = false,
+  assetsError = '',
+  assetUploading = false,
+  onUploadAsset,
+  onRefreshAssets,
 }) {
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col border-l border-[#2a2a2a] bg-[#1a1a1a] text-white">
@@ -158,6 +171,9 @@ export function FormStudioInspector({
 
                   {open && row.id !== 'ab' ? (
                     <div className="space-y-2 border-t border-[#2a2a2a] bg-[#151515] px-4 py-3">
+                      {row.id === 'install' ? (
+                        <FormInstallPanel form={form} />
+                      ) : null}
                       {row.id === 'audience' ? (
                         <input
                           value={(form.tags || []).join(', ')}
@@ -313,7 +329,63 @@ export function FormStudioInspector({
                     className={inputClass}
                   />
                 </Field>
-                {'required' in selectedField ? (
+                {selectedField.type === 'image' ? (
+                  <div className="space-y-3">
+                    <EmailAssetPicker
+                      assets={assets}
+                      value={selectedField.props?.asset_id || null}
+                      loading={assetsLoading}
+                      error={assetsError}
+                      uploading={assetUploading}
+                      emptyHint="Drop or pick an image for this form."
+                      compact
+                      onSelect={(assetId) => {
+                        onPatchField(selectedField.id, {
+                          props: {
+                            ...(selectedField.props || {}),
+                            asset_id: assetId,
+                            src: null,
+                          },
+                        })
+                      }}
+                      onUpload={onUploadAsset}
+                      onRefresh={onRefreshAssets}
+                    />
+                    <Field label="Or image URL">
+                      <input
+                        value={selectedField.props?.src || ''}
+                        onChange={(event) =>
+                          onPatchField(selectedField.id, {
+                            props: {
+                              ...(selectedField.props || {}),
+                              src: event.target.value.trim() || null,
+                              asset_id: event.target.value.trim()
+                                ? null
+                                : selectedField.props?.asset_id || null,
+                            },
+                          })
+                        }
+                        className={inputClass}
+                        placeholder="https://"
+                      />
+                    </Field>
+                    <Field label="Alt text">
+                      <input
+                        value={selectedField.props?.alt || ''}
+                        onChange={(event) =>
+                          onPatchField(selectedField.id, {
+                            props: {
+                              ...(selectedField.props || {}),
+                              alt: event.target.value,
+                            },
+                          })
+                        }
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+                {selectedField.type !== 'image' && 'required' in selectedField ? (
                   <label className="flex items-center gap-2 text-[12px] text-[#cfcfcf]">
                     <input
                       type="checkbox"
@@ -374,6 +446,75 @@ export function FormStudioInspector({
 
 const inputClass =
   'h-9 w-full rounded-md border border-[#333] bg-[#222] px-3 text-[12px] text-white outline-none focus:border-[#14b8a6]'
+
+function FormInstallPanel({ form }) {
+  const enabled = form.status === 'enabled'
+  const embedUrl = form.embedUrl || ''
+  const snippet = embedUrl
+    ? `<iframe src="${embedUrl}" title="${form.name || 'Inboxly form'}" style="width:100%;min-height:520px;border:0;" loading="lazy"></iframe>`
+    : ''
+
+  const copy = async (text) => {
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // ignore — merchant can select manually
+    }
+  }
+
+  if (!form.id) {
+    return (
+      <p className="text-[12px] leading-relaxed text-[#9a9a9a]">
+        Save this form first, then enable it to get an install link.
+      </p>
+    )
+  }
+
+  if (!enabled || !embedUrl) {
+    return (
+      <p className="text-[12px] leading-relaxed text-[#9a9a9a]">
+        Enable the form (top bar) to unlock the public embed URL. Draft forms stay private.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[12px] leading-relaxed text-[#9a9a9a]">
+        Paste this into a Shopify page, Custom Liquid section, or any site that supports iframes.
+      </p>
+      <Field label="Embed URL">
+        <div className="flex gap-2">
+          <input readOnly value={embedUrl} className={inputClass} />
+          <button
+            type="button"
+            onClick={() => copy(embedUrl)}
+            className="shrink-0 rounded-md border border-[#333] px-2 text-[11px] text-[#5eead4] hover:border-[#14b8a6]"
+          >
+            Copy
+          </button>
+        </div>
+      </Field>
+      <Field label="Iframe snippet">
+        <textarea readOnly value={snippet} rows={4} className={cn(inputClass, 'h-auto py-2 font-mono text-[11px]')} />
+        <button
+          type="button"
+          onClick={() => copy(snippet)}
+          className="mt-2 rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#5eead4] hover:border-[#14b8a6]"
+        >
+          Copy snippet
+        </button>
+      </Field>
+      <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-[#8a8a8a]">
+        <li>In Shopify admin: Online Store → Themes → Customize (or Edit code).</li>
+        <li>Add a Custom Liquid / HTML block on a page or theme section.</li>
+        <li>Paste the iframe snippet and save.</li>
+        <li>Open the page on your storefront to confirm the form loads.</li>
+      </ol>
+    </div>
+  )
+}
 
 function Field({ label, children }) {
   return (

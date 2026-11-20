@@ -6,7 +6,6 @@ import {
   Button,
   FormField,
   Input,
-  Modal,
   Table,
   ThemeSwitcher,
   LoadingState,
@@ -43,7 +42,6 @@ export function AccountSettingsPage() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordFieldErrors, setPasswordFieldErrors] = useState({})
   const [notice, setNotice] = useState('')
-  const [inviteNoticeOpen, setInviteNoticeOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -268,27 +266,9 @@ export function AccountSettingsPage() {
                 rows={members}
               />
             ) : null}
-            <Button
-              className="mt-3"
-              variant="secondary"
-              onClick={() => setInviteNoticeOpen(true)}
-            >
-              Invite member
-            </Button>
           </div>
         </Card>
       </div>
-
-      <Modal
-        open={inviteNoticeOpen}
-        onClose={() => setInviteNoticeOpen(false)}
-        title="Invite member"
-        footer={<Button onClick={() => setInviteNoticeOpen(false)}>OK</Button>}
-      >
-        <p className="text-sm text-muted">
-          Use workspace invitations from the API when ready. Member list above is live.
-        </p>
-      </Modal>
     </div>
   )
 }

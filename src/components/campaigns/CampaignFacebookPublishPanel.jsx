@@ -193,7 +193,6 @@ export function CampaignFacebookPublishPanel({ campaign, onCampaignUpdated }) {
           !confirmRepublish
         ) {
           setConfirmRepublish(true)
-          // Keep the confirm dialog open (ConfirmDialog closes only on resolve).
           throw new Error(
             'This content was already published. Confirm again to intentionally create another Facebook post (duplicate risk).',
           )
@@ -211,7 +210,7 @@ export function CampaignFacebookPublishPanel({ campaign, onCampaignUpdated }) {
       const simulated = rows.some((row) => row.simulated)
       setNotice(
         simulated
-          ? 'Simulated publication recorded (fake Meta driver). Not a real Facebook post.'
+          ? 'Simulated Facebook publication recorded. Not a live Facebook post.'
           : 'Facebook publication queued.',
       )
       await load()

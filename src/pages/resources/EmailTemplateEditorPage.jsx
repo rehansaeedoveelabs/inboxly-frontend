@@ -9,6 +9,7 @@ import {
 import { EmailTemplateStudio } from '../../components/emailTemplates/studio/EmailTemplateStudio'
 import { ApiError } from '../../lib/api'
 import { listStoreAssets, uploadStoreAsset } from '../../lib/assetsApi'
+import { listStoreShopifyProducts } from '../../lib/shopifyProductsApi'
 import { applyCampaignTemplate } from '../../lib/campaignsApi'
 import {
   clearCampaignTemplatePick,
@@ -50,6 +51,10 @@ export function EmailTemplateEditorPage() {
   const [assetsError, setAssetsError] = useState('')
   const [assetUploading, setAssetUploading] = useState(false)
   const [assetsNonce, setAssetsNonce] = useState(0)
+  const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productsError, setProductsError] = useState('')
+  const [productsNonce, setProductsNonce] = useState(0)
 
   const [previewHtml, setPreviewHtml] = useState('')
   const [previewError, setPreviewError] = useState('')
@@ -125,7 +130,36 @@ export function EmailTemplateEditorPage() {
     }
   }, [storeId, storeStatus, assetsNonce])
 
+  useEffect(() => {
+    if (storeStatus === 'loading' || !storeId) return undefined
+
+    let cancelled = false
+    setProductsLoading(true)
+    setProductsError('')
+
+    listStoreShopifyProducts(storeId, { limit: 100 })
+      .then((page) => {
+        if (cancelled) return
+        setProducts(page.data || [])
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setProducts([])
+        setProductsError(
+          error instanceof ApiError ? error.message : 'Unable to load Shopify products.',
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId, storeStatus, productsNonce])
+
   const refreshAssets = useCallback(() => setAssetsNonce((n) => n + 1), [])
+  const refreshProducts = useCallback(() => setProductsNonce((n) => n + 1), [])
 
   const uploadAsset = useCallback(
     async (file) => {
@@ -365,6 +399,9 @@ export function EmailTemplateEditorPage() {
         assetsLoading={assetsLoading}
         assetsError={assetsError}
         assetUploading={assetUploading}
+        products={products}
+        productsLoading={productsLoading}
+        productsError={productsError}
         saving={saving}
         savedFlash={savedFlash}
         pickingForCampaign={pickingForCampaign}
@@ -375,6 +412,7 @@ export function EmailTemplateEditorPage() {
         onRefreshPreview={runPreview}
         onUploadAsset={uploadAsset}
         onRefreshAssets={refreshAssets}
+        onRefreshProducts={refreshProducts}
         onDelete={pickingForCampaign ? undefined : () => setConfirmDelete(true)}
         nameError={fieldErrors.name}
         actionError={actionError || fieldErrors.document || previewError}
